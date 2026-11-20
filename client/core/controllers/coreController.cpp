@@ -155,6 +155,7 @@ void CoreController::initRepositories()
 {
     m_serversRepository = new SecureServersRepository(m_settings, this);
     m_appSettingsRepository = new SecureAppSettingsRepository(m_settings, this);
+    m_managedConfigRepository = new ManagedConfigRepository(m_settings, this);
 
     if (m_vpnConnection) {
         m_vpnConnection->setRepositories(m_serversRepository, m_appSettingsRepository);
@@ -180,6 +181,8 @@ void CoreController::initCoreControllers()
     m_connectionController = new ConnectionController(m_serversRepository, m_appSettingsRepository, m_vpnConnection.get(), this);
     m_settingsController = new SettingsController(m_serversRepository, m_appSettingsRepository, this);
     m_localProxyController = new LocalProxyController(m_serversRepository, m_appSettingsRepository, m_subscriptionController, this);
+    m_managedConfigController = new ManagedConfigController(m_serversRepository, m_managedConfigRepository,
+                                                            m_importCoreController, m_connectionController, this);
 }
 
 void CoreController::initControllers()
@@ -256,6 +259,9 @@ void CoreController::initControllers()
 
     m_updateUiController = new UpdateUiController(m_updateController, this);
     setQmlContextProperty("UpdateController", m_updateUiController);
+
+    m_managedConfigUiController = new ManagedConfigUiController(m_managedConfigController, this);
+    setQmlContextProperty("ManagedConfigController", m_managedConfigUiController);
 }
 
 void CoreController::initAndroidController()

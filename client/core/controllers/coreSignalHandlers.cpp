@@ -93,6 +93,7 @@ void CoreSignalHandlers::initAllHandlers()
     initNotificationHandler();
     initUpdateFoundHandler();
     initLocalProxyHandler();
+    initManagedConfigHandler();
 }
 
 void CoreSignalHandlers::initErrorMessagesHandler()
@@ -426,6 +427,8 @@ void CoreSignalHandlers::initPrepareConfigHandler()
 
         if (serverConfigUtils::isApiV2Subscription(kind) || serverConfigUtils::isLegacyApiSubscription(kind)) {
             m_coreController->m_subscriptionUiController->validateConfig();
+        } else if (m_coreController->m_managedConfigController->isManaged(serverId)) {
+            m_coreController->m_managedConfigController->refreshBeforeConnect(serverId);
         } else {
             m_coreController->m_installUiController->validateConfig();
         }
@@ -562,4 +565,14 @@ void CoreSignalHandlers::initLocalProxyHandler()
             &PageController::showNotificationMessage);
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, m_coreController->m_localProxyController,
             &LocalProxyController::disable);
+}
+
+void CoreSignalHandlers::initManagedConfigHandler()
+{
+    connect(m_coreController->m_managedConfigController, &ManagedConfigController::readyToConnect,
+            m_coreController->m_installUiController, &InstallUiController::validateConfig);
+    connect(m_coreController->m_serversRepository, &SecureServersRepository::serverRemoved,
+            m_coreController->m_managedConfigController, &ManagedConfigController::forget);
+
+    m_coreController->m_managedConfigController->start();
 }

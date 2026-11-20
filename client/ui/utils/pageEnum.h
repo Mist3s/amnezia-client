@@ -93,6 +93,8 @@ namespace PageLoader
         PageSettingsLanguage,
 
         PageUpdate,
+
+        PageSettingsManagedConfig,
     };
     Q_ENUM_NS(PageEnum)
 

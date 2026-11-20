@@ -31,6 +31,7 @@
 #include "ui/controllers/systemController.h"
 #include "ui/controllers/languageUiController.h"
 #include "ui/controllers/updateUiController.h"
+#include "ui/controllers/managedConfigUiController.h"
 #include "ui/controllers/api/servicesCatalogUiController.h"
 #include "ui/controllers/networkReachabilityController.h"
 
@@ -48,9 +49,11 @@
 #include "core/controllers/localProxyController.h"
 #include "core/controllers/connectionController.h"
 #include "core/controllers/updateController.h"
+#include "core/controllers/managedConfigController.h"
 
 #include "core/repositories/secureServersRepository.h"
 #include "core/repositories/secureAppSettingsRepository.h"
+#include "core/repositories/managedConfigRepository.h"
 #include "secureQSettings.h"
 
 #include "ui/models/allowedDnsModel.h"
@@ -165,6 +168,7 @@ private:
 
     SecureServersRepository* m_serversRepository;
     SecureAppSettingsRepository* m_appSettingsRepository;
+    ManagedConfigRepository *m_managedConfigRepository;
 
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     NotificationHandler* m_notificationHandler;
@@ -190,6 +194,7 @@ private:
     AllowedDnsUiController* m_allowedDnsUiController;
     LanguageUiController* m_languageUiController;
     UpdateUiController* m_updateUiController;
+    ManagedConfigUiController *m_managedConfigUiController;
 
     SubscriptionUiController* m_subscriptionUiController;
     ApiNewsUiController* m_apiNewsUiController;
@@ -206,6 +211,7 @@ private:
     StorePurchaseController* m_storePurchaseController;
     NewsController* m_newsController;
     UpdateController* m_updateController;
+    ManagedConfigController *m_managedConfigController;
     InstallController* m_installController;
     ExportController* m_exportController;
     ConnectionController* m_connectionController;

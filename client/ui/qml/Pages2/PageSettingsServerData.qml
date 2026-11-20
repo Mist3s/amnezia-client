@@ -169,6 +169,19 @@ PageType {
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
 
+                visible: ManagedConfigController.isSupported(ServersUiController.processedServerId)
+
+                text: qsTr("Config auto-update")
+                subtitle: qsTr("Fetch the current config from your backend")
+
+                onClicked: PageController.goToPage(PageEnum.PageSettingsManagedConfig)
+            }
+
+            ListItemType {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+
                 text: qsTr("Remove server from application")
                 destructive: true
 

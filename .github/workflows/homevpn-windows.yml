@@ -1,0 +1,78 @@
+name: 'HomeVPN Windows'
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'HomeVPN build number (only grows, never reset)'
+        required: true
+
+env:
+  QT_VERSION: 6.10.1
+  QIF_VERSION: 4.7
+  QT_MIRROR: https://mirrors.ocf.berkeley.edu/qt/
+
+jobs:
+  Build-Windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: 'Get sources'
+      uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+        fetch-depth: 10
+
+    - name: 'Install Qt'
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2022_64'
+        modules: 'qtremoteobjects qt5compat qtshadertools qthttpserver qtwebsockets'
+        dir: ${{ runner.temp }}
+        setup-python: 'true'
+        tools: 'tools_ifw'
+        set-env: 'true'
+        aqtversion: '==3.3.0'
+        py7zrversion: '==0.22.*'
+        extra: '--base ${{ env.QT_MIRROR }}'
+
+    - name: 'Setup msvc'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: 'x64'
+
+    - name: 'Setup python'
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.14
+
+    - name: 'Install conan'
+      run: pip install "conan==2.28.0"
+
+    - name: 'Compute version'
+      shell: bash
+      env:
+        BUILD_NUMBER: ${{ inputs.build_number }}
+      run: |
+        upstream="$(sed -n 's/^ *set(AMNEZIAVPN_VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)"
+        [ -n "$upstream" ] && [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]
+        echo "HOMEVPN_VERSION=${upstream%.*}.$(( ${upstream##*.} * 100 + BUILD_NUMBER ))" >> "$GITHUB_ENV"
+
+    - name: 'Build project'
+      shell: cmd
+      env:
+        QT_ROOT: ${{ runner.temp }}\Qt
+      run: |
+        cmake -S . -B deploy\build -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=%QT_ROOT%\%QT_VERSION%\msvc2022_64" "-DCMAKE_VS_GLOBALS=UseMultiToolTask=true;EnforceProcessCountAcrossBuilds=true" -DAMNEZIAVPN_VERSION=%HOMEVPN_VERSION% "-DCONAN_HOST_PROFILE=default;auto-cmake;%GITHUB_WORKSPACE%\homevpn\conan-pin-zlib.profile" || exit /b 1
+        cmake --build deploy\build --config Release -- /m || exit /b 1
+        cd deploy\build && cpack -G IFW -D "QTIFWDIR=%QT_ROOT%\Tools\QtInstallerFramework\%QIF_VERSION%" || exit /b 1
+
+    - name: 'Upload IFW installer artifact'
+      uses: actions/upload-artifact@v7
+      with:
+        path: deploy/build/AmneziaVPN_*_windows_x64.exe
+        archive: false
+        retention-days: 30

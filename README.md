@@ -1,3 +1,5 @@
+> **HomeVPN fork.** What is changed, how to build, release a version and manage devices: [HOMEVPN.md](HOMEVPN.md).
+
 # Amnezia VPN
 
 ### _The best client for self-hosted VPN_

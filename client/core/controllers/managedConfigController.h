@@ -37,6 +37,7 @@ public:
     bool isManaged(const QString &serverId) const;
     bool isRefreshing(const QString &serverId) const;
     ManagedConfigSettings settings(const QString &serverId) const;
+    ManagedConfigSettings updateSource() const;
 
     void configure(const QString &serverId, const QStringList &backendUrls, const QString &deviceKey);
 

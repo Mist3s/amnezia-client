@@ -43,9 +43,9 @@ public:
     bool isUpdateCheckRunning() const;
 
 public slots:
-    void checkForUpdates();
-    void startUpdate();
-    void installUpdate();
+    virtual void checkForUpdates();
+    virtual void startUpdate();
+    virtual void installUpdate();
 
 signals:
     void updateFound();
@@ -54,7 +54,7 @@ signals:
     void updateStateChanged();
     void updateCheckRunningChanged();
 
-private:
+protected:
     void setUpdateState(UpdateState::State state);
     void setUpdateCheckRunning(bool running);
     void downloadInstaller();

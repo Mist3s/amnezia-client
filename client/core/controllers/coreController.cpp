@@ -9,6 +9,7 @@
 #include "core/controllers/selfhosted/installController.h"
 #include "core/controllers/selfhosted/importController.h"
 #include "core/controllers/coreSignalHandlers.h"
+#include "core/controllers/backendUpdateController.h"
 #include "logger.h"
 #include "secureQSettings.h"
 #include "core/utils/appUiConfig.h"
@@ -173,7 +174,6 @@ void CoreController::initCoreControllers()
     m_subscriptionController = new SubscriptionController(m_serversRepository, m_appSettingsRepository);
     m_storePurchaseController = new StorePurchaseController(m_serversRepository, m_appSettingsRepository);
     m_newsController = new NewsController(m_appSettingsRepository, m_serversRepository);
-    m_updateController = new UpdateController(m_appSettingsRepository, this);
     
     m_installController = new InstallController(m_serversRepository, m_appSettingsRepository, this);
     m_exportController = new ExportController(m_serversRepository, m_appSettingsRepository, this);
@@ -183,6 +183,7 @@ void CoreController::initCoreControllers()
     m_localProxyController = new LocalProxyController(m_serversRepository, m_appSettingsRepository, m_subscriptionController, this);
     m_managedConfigController = new ManagedConfigController(m_serversRepository, m_managedConfigRepository,
                                                             m_importCoreController, m_connectionController, this);
+    m_updateController = new BackendUpdateController(m_appSettingsRepository, m_managedConfigController, this);
 }
 
 void CoreController::initControllers()

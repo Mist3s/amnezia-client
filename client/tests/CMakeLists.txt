@@ -278,6 +278,15 @@ if(NOT ANDROID)
         test_common
     )
 
+    add_executable(test_managed_update_policy
+        testManagedUpdatePolicy.cpp
+    )
+
+    target_link_libraries(test_managed_update_policy PRIVATE
+        Qt6::Test
+        test_common
+    )
+
     add_executable(test_openssl_library
         testOpenSSLLibrary.cpp
     )
@@ -502,6 +511,7 @@ if(NOT ANDROID)
     add_test(NAME OpenSSLLibraryTest               COMMAND test_openssl_library)
     add_test(NAME LogsControllerTest               COMMAND test_logs_controller)
     add_test(NAME ManagedConfigPolicyTest          COMMAND test_managed_config_policy)
+    add_test(NAME ManagedUpdatePolicyTest          COMMAND test_managed_update_policy)
 endif()
 
 # Android tests are executed on-device via androidtestrunner in CI (see .github/workflows/tests.yml).

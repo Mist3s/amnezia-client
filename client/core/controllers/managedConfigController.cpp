@@ -88,6 +88,20 @@ ManagedConfigSettings ManagedConfigController::settings(const QString &serverId)
     return m_managedConfigRepository->settings(serverId);
 }
 
+ManagedConfigSettings ManagedConfigController::updateSource() const
+{
+    const QString defaultServerId = m_serversRepository->defaultServerId();
+    if (isManaged(defaultServerId)) {
+        return settings(defaultServerId);
+    }
+    for (const QString &serverId : m_managedConfigRepository->managedServerIds()) {
+        if (isManaged(serverId)) {
+            return settings(serverId);
+        }
+    }
+    return ManagedConfigSettings();
+}
+
 void ManagedConfigController::configure(const QString &serverId, const QStringList &backendUrls, const QString &deviceKey)
 {
     if (!isSupported(serverId)) {

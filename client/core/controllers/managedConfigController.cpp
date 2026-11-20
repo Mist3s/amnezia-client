@@ -201,9 +201,16 @@ QNetworkReply *ManagedConfigController::requestConfig(const QString &backendUrl,
 
 void ManagedConfigController::setup(const QStringList &backendUrls, const QString &deviceKey, bool connectAfterSetup)
 {
+    emit setupStarted();
+
     for (const QString &serverId : m_managedConfigRepository->managedServerIds()) {
-        if (isManaged(serverId) && settings(serverId).deviceKey == deviceKey) {
+        if (!isManaged(serverId)) {
+            continue;
+        }
+        const ManagedConfigSettings current = settings(serverId);
+        if (current.deviceKey == deviceKey || managedConfig::haveCommonBackend(current.backendUrls, backendUrls)) {
             configure(serverId, backendUrls, deviceKey);
+            refresh(serverId);
             finishSetup(serverId, RefreshResult::UpToDate, connectAfterSetup);
             return;
         }

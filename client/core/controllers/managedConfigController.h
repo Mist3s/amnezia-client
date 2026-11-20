@@ -54,6 +54,7 @@ signals:
     void refreshStarted(const QString &serverId);
     void refreshFinished(const QString &serverId, ManagedConfigController::RefreshResult result);
     void readyToConnect();
+    void setupStarted();
     void setupFinished(const QString &serverId, ManagedConfigController::RefreshResult result);
 
 private:

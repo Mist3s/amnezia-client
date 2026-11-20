@@ -26,6 +26,8 @@ ManagedConfigUiController::ManagedConfigUiController(ManagedConfigController *ma
                 }
             });
 
+    connect(m_managedConfigController, &ManagedConfigController::setupStarted, this,
+            &ManagedConfigUiController::setupStarted);
     connect(m_managedConfigController, &ManagedConfigController::setupFinished, this,
             [this](const QString &serverId, ManagedConfigController::RefreshResult result) {
                 emit setupFinished(!serverId.isEmpty(), resultText(result));

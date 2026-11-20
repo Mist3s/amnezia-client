@@ -93,6 +93,13 @@ private slots:
         QVERIFY(!parseSetupRequest(content).isValid());
     }
 
+    void backendsInCommonAreFound()
+    {
+        QVERIFY(haveCommonBackend({ "https://one.example.org", "https://two.example.org" }, { "https://two.example.org" }));
+        QVERIFY(!haveCommonBackend({ "https://one.example.org" }, { "https://two.example.org" }));
+        QVERIFY(!haveCommonBackend({}, { "https://two.example.org" }));
+    }
+
     void emptyInputGivesNoBackends()
     {
         QCOMPARE(parseBackendUrls(" , ;\n"), QStringList());

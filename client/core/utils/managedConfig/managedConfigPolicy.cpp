@@ -1,5 +1,7 @@
 #include "managedConfigPolicy.h"
 
+#include <algorithm>
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
@@ -76,6 +78,11 @@ namespace amnezia::managedConfig
         request.connect = object.value(setupConnectKey).toBool();
         request.autoStart = object.value(setupAutoStartKey).toBool();
         return request;
+    }
+
+    bool haveCommonBackend(const QStringList &left, const QStringList &right)
+    {
+        return std::any_of(left.cbegin(), left.cend(), [&right](const QString &url) { return right.contains(url); });
     }
 
     QStringList orderedBackendUrls(const QStringList &backendUrls, const QString &lastWorkingUrl)

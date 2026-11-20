@@ -48,11 +48,14 @@ signals:
     void qrDecodingFinished();
     void restoreAppConfig(const QByteArray &data);
     void importConfigChanged();
+    void managedSetupRequested(const QByteArray &setupData);
 
 private:
 #if defined Q_OS_ANDROID || defined Q_OS_IOS
     void stopDecodingQr();
 #endif
+
+    bool requestManagedSetup(const QString &data);
 
     ImportController* m_importController;
 

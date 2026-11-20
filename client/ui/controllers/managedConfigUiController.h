@@ -32,6 +32,7 @@ signals:
     void settingsChanged();
     void statusChanged();
     void manualRefreshFinished(const QString &message);
+    void setupStarted();
     void setupFinished(bool isSetUp, const QString &message);
 
 private:

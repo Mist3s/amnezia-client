@@ -111,6 +111,7 @@ public:
     void openConnectionByIndex(int serverIndex);
     void importConfigFromData(const QString &data);
     void applyManagedSetupFile(const QString &filePath);
+    void applyManagedSetup(const QByteArray &setupData);
     void updateTranslator(const QLocale &locale);
 
 signals:

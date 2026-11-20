@@ -410,9 +410,18 @@ void CoreController::applyManagedSetupFile(const QString &filePath)
     if (!file.open(QIODevice::ReadOnly)) {
         return;
     }
-    const managedConfig::SetupRequest request = managedConfig::parseSetupRequest(file.readAll());
+    const QByteArray setupData = file.readAll();
     file.remove();
 
+    const bool isAutoConnectPending =
+            m_settingsController->isAutoConnectEnabled() && !m_serversController->getDefaultServerId().isEmpty();
+    QTimer::singleShot(isAutoConnectPending ? managedSetupAfterAutoConnectDelayMs : 0, this,
+                       [this, setupData]() { applyManagedSetup(setupData); });
+}
+
+void CoreController::applyManagedSetup(const QByteArray &setupData)
+{
+    const managedConfig::SetupRequest request = managedConfig::parseSetupRequest(setupData);
     if (!request.isValid()) {
         emit m_pageController->showErrorMessage(tr("The setup file has no backend address or device key"));
         return;
@@ -429,12 +438,7 @@ void CoreController::applyManagedSetupFile(const QString &filePath)
                 Qt::SingleShotConnection);
     }
 
-    const bool isAutoConnectPending =
-            m_settingsController->isAutoConnectEnabled() && !m_serversController->getDefaultServerId().isEmpty();
-    QTimer::singleShot(isAutoConnectPending ? managedSetupAfterAutoConnectDelayMs : 0, m_managedConfigController,
-                       [this, request]() {
-                           m_managedConfigController->setup(request.backendUrls, request.deviceKey, request.connect);
-                       });
+    m_managedConfigController->setup(request.backendUrls, request.deviceKey, request.connect);
 }
 
 void CoreController::importConfigFromData(const QString &data)

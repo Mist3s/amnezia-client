@@ -500,9 +500,11 @@ void CoreSignalHandlers::initAndroidConnectionHandler()
     });
     connect(AndroidController::instance(), &AndroidController::importConfigFromOutside, this, [this](QString data) {
         emit m_coreController->m_pageController->goToPageHome();
-        m_coreController->m_importController->extractConfigFromData(data);
+        const bool isConfigExtracted = m_coreController->m_importController->extractConfigFromData(data);
         data.clear();
-        emit m_coreController->m_pageController->goToPageViewConfig();
+        if (isConfigExtracted) {
+            emit m_coreController->m_pageController->goToPageViewConfig();
+        }
     });
 #endif
 }
@@ -573,6 +575,8 @@ void CoreSignalHandlers::initManagedConfigHandler()
             m_coreController->m_installUiController, &InstallUiController::validateConfig);
     connect(m_coreController->m_serversRepository, &SecureServersRepository::serverRemoved,
             m_coreController->m_managedConfigController, &ManagedConfigController::forget);
+    connect(m_coreController->m_importController, &ImportUiController::managedSetupRequested, m_coreController,
+            &CoreController::applyManagedSetup);
 
     m_coreController->m_managedConfigController->start();
 }

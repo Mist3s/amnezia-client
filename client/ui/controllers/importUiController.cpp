@@ -6,6 +6,7 @@
 #include <QMutex>
 #include <QJsonDocument>
 
+#include "core/utils/managedConfig/managedConfigPolicy.h"
 #include "systemController.h"
 
 #ifdef Q_OS_ANDROID
@@ -39,6 +40,10 @@ bool ImportUiController::extractConfigFromFile(const QString &fileName)
         return false;
     }
     
+    if (requestManagedSetup(data)) {
+        return false;
+    }
+
     QString configFileName = QFileInfo(QFile(fileName).fileName()).fileName();
 #ifdef Q_OS_ANDROID
     if (configFileName.isEmpty()) {
@@ -62,8 +67,22 @@ bool ImportUiController::extractConfigFromFile(const QString &fileName)
     return true;
 }
 
+bool ImportUiController::requestManagedSetup(const QString &data)
+{
+    const QByteArray setupData = data.toUtf8();
+    if (!managedConfig::parseSetupRequest(setupData).isValid()) {
+        return false;
+    }
+    emit managedSetupRequested(setupData);
+    return true;
+}
+
 bool ImportUiController::extractConfigFromData(QString data)
 {
+    if (requestManagedSetup(data)) {
+        return false;
+    }
+
     auto result = m_importController->extractConfigFromData(data);
     
     if (result.errorCode != ErrorCode::NoError) {

@@ -40,6 +40,7 @@ namespace amnezia::managedConfig
 
     QStringList parseBackendUrls(const QString &input);
     SetupRequest parseSetupRequest(const QByteArray &content);
+    bool haveCommonBackend(const QStringList &left, const QStringList &right);
     QStringList orderedBackendUrls(const QStringList &backendUrls, const QString &lastWorkingUrl);
     QUrl configEndpoint(const QString &backendUrl);
 

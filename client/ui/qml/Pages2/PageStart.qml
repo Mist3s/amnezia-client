@@ -216,7 +216,12 @@ PageType {
     Connections {
         target: ManagedConfigController
 
+        function onSetupStarted() {
+            PageController.showBusyIndicator(true)
+        }
+
         function onSetupFinished(isSetUp, message) {
+            PageController.showBusyIndicator(false)
             if (isSetUp) {
                 PageController.goToPageHome()
             }

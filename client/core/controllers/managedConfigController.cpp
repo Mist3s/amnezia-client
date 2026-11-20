@@ -181,26 +181,132 @@ QNetworkAccessManager *ManagedConfigController::networkManager() const
     return application ? application->networkManager() : nullptr;
 }
 
-void ManagedConfigController::requestNextBackend(const QString &serverId)
+QNetworkReply *ManagedConfigController::requestConfig(const QString &backendUrl, const QString &deviceKey,
+                                                      const QString &revision) const
 {
     QNetworkAccessManager *manager = networkManager();
-    if (!manager || m_pendingBackendUrls.value(serverId).isEmpty()) {
-        finishRefresh(serverId, RefreshResult::BackendUnreachable);
-        return;
+    if (!manager || backendUrl.isEmpty()) {
+        return nullptr;
     }
-
-    const QString backendUrl = m_pendingBackendUrls[serverId].takeFirst();
-    const ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
 
     QNetworkRequest request(managedConfig::configEndpoint(backendUrl));
     request.setTransferTimeout(backendRequestTimeoutMs);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-    request.setRawHeader("Authorization", "Bearer " + settings.deviceKey.toUtf8());
-    if (!settings.revision.isEmpty()) {
-        request.setRawHeader("If-None-Match", '"' + settings.revision.toUtf8() + '"');
+    request.setRawHeader("Authorization", "Bearer " + deviceKey.toUtf8());
+    if (!revision.isEmpty()) {
+        request.setRawHeader("If-None-Match", '"' + revision.toUtf8() + '"');
+    }
+    return manager->get(request);
+}
+
+void ManagedConfigController::setup(const QStringList &backendUrls, const QString &deviceKey, bool connectAfterSetup)
+{
+    for (const QString &serverId : m_managedConfigRepository->managedServerIds()) {
+        if (isManaged(serverId) && settings(serverId).deviceKey == deviceKey) {
+            configure(serverId, backendUrls, deviceKey);
+            finishSetup(serverId, RefreshResult::UpToDate, connectAfterSetup);
+            return;
+        }
     }
 
-    QNetworkReply *reply = manager->get(request);
+    ManagedConfigSettings fresh;
+    fresh.backendUrls = backendUrls;
+    fresh.deviceKey = deviceKey;
+    requestSetupConfig(fresh, backendUrls, connectAfterSetup);
+}
+
+void ManagedConfigController::requestSetupConfig(const ManagedConfigSettings &settings, QStringList pendingBackendUrls,
+                                                 bool connectAfterSetup)
+{
+    const QString backendUrl = pendingBackendUrls.isEmpty() ? QString() : pendingBackendUrls.takeFirst();
+    QNetworkReply *reply = requestConfig(backendUrl, settings.deviceKey, QString());
+    if (!reply) {
+        finishSetup(QString(), RefreshResult::BackendUnreachable, false);
+        return;
+    }
+
+    connect(reply, &QNetworkReply::finished, this, [this, settings, pendingBackendUrls, connectAfterSetup, backendUrl, reply]() {
+        reply->deleteLater();
+        const managedConfig::ReplyDecision decision =
+                managedConfig::decideOnReply(httpStatusOf(reply), reply->readAll(), QString());
+
+        switch (decision.action) {
+        case managedConfig::ReplyAction::TryNextBackend: {
+            requestSetupConfig(settings, pendingBackendUrls, connectAfterSetup);
+            return;
+        }
+        case managedConfig::ReplyAction::RejectKey: {
+            finishSetup(QString(), RefreshResult::KeyRejected, false);
+            return;
+        }
+        case managedConfig::ReplyAction::KeepCurrent: {
+            finishSetup(QString(), RefreshResult::InvalidConfig, false);
+            return;
+        }
+        case managedConfig::ReplyAction::Apply: {
+            const QJsonObject config = nativeConfigFrom(decision.config);
+            const QString serverId = config.isEmpty()
+                    ? QString()
+                    : m_serversRepository->addServer(QString(), config, serverConfigUtils::ConfigType::Native);
+            if (!isSupported(serverId)) {
+                finishSetup(QString(), RefreshResult::InvalidConfig, false);
+                return;
+            }
+
+            ManagedConfigSettings fresh = settings;
+            fresh.lastWorkingUrl = backendUrl;
+            fresh.revision = decision.revision;
+            fresh.pollIntervalHours = decision.pollIntervalHours;
+            fresh.lastCheckedAt = QDateTime::currentSecsSinceEpoch();
+            fresh.lastResult = static_cast<int>(RefreshResult::Updated);
+            m_managedConfigRepository->setSettings(serverId, fresh);
+            finishSetup(serverId, RefreshResult::Updated, connectAfterSetup);
+            return;
+        }
+        }
+    });
+}
+
+void ManagedConfigController::finishSetup(const QString &serverId, RefreshResult result, bool connectAfterSetup)
+{
+    logger.info() << "Managed config setup finished with result" << static_cast<int>(result);
+
+    if (!serverId.isEmpty()) {
+        m_serversRepository->setDefaultServer(serverId);
+        if (connectAfterSetup) {
+            connectTo(serverId);
+        }
+    }
+    emit setupFinished(serverId, result);
+}
+
+void ManagedConfigController::connectTo(const QString &serverId)
+{
+    if (m_connectionState != Vpn::ConnectionState::Disconnected && m_connectionServerId == serverId) {
+        return;
+    }
+
+    if (m_connectionState == Vpn::ConnectionState::Disconnected) {
+        reopenConnection(serverId);
+        return;
+    }
+    m_plan = Plan::ReconnectAfterClose;
+    m_planServerId = serverId;
+    m_connectionController->closeConnection();
+}
+
+void ManagedConfigController::requestNextBackend(const QString &serverId)
+{
+    const QString backendUrl =
+            m_pendingBackendUrls.value(serverId).isEmpty() ? QString() : m_pendingBackendUrls[serverId].takeFirst();
+    const ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
+
+    QNetworkReply *reply = requestConfig(backendUrl, settings.deviceKey, settings.revision);
+    if (!reply) {
+        finishRefresh(serverId, RefreshResult::BackendUnreachable);
+        return;
+    }
+
     connect(reply, &QNetworkReply::finished, this, [this, serverId, backendUrl, reply]() {
         reply->deleteLater();
         handleBackendReply(serverId, backendUrl, reply);
@@ -257,17 +363,26 @@ bool ManagedConfigController::applyConfig(const QString &serverId, const QString
         return false;
     }
 
-    const ImportController::ImportResult imported = m_importController->extractConfigFromData(config);
-    if (imported.errorCode != ErrorCode::NoError
-        || serverConfigUtils::configTypeFromJson(imported.config) != serverConfigUtils::ConfigType::Native) {
+    const QJsonObject imported = nativeConfigFrom(config);
+    if (imported.isEmpty()) {
         return false;
     }
 
-    NativeServerConfig fresh = NativeServerConfig::fromJson(imported.config);
+    NativeServerConfig fresh = NativeServerConfig::fromJson(imported);
     fresh.description = current->description;
     fresh.displayName = current->displayName;
     m_serversRepository->editServer(serverId, fresh.toJson(), serverConfigUtils::ConfigType::Native);
     return true;
+}
+
+QJsonObject ManagedConfigController::nativeConfigFrom(const QString &config) const
+{
+    const ImportController::ImportResult imported = m_importController->extractConfigFromData(config);
+    if (imported.errorCode != ErrorCode::NoError
+        || serverConfigUtils::configTypeFromJson(imported.config) != serverConfigUtils::ConfigType::Native) {
+        return QJsonObject();
+    }
+    return imported.config;
 }
 
 void ManagedConfigController::finishRefresh(const QString &serverId, RefreshResult result)

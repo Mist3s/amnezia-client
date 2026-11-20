@@ -2,6 +2,7 @@
 #define MANAGEDCONFIGCONTROLLER_H
 
 #include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QStringList>
 #include <QTimer>
@@ -40,6 +41,7 @@ public:
     ManagedConfigSettings updateSource() const;
 
     void configure(const QString &serverId, const QStringList &backendUrls, const QString &deviceKey);
+    void setup(const QStringList &backendUrls, const QString &deviceKey, bool connectAfterSetup);
 
     void start();
     void refresh(const QString &serverId);
@@ -52,6 +54,7 @@ signals:
     void refreshStarted(const QString &serverId);
     void refreshFinished(const QString &serverId, ManagedConfigController::RefreshResult result);
     void readyToConnect();
+    void setupFinished(const QString &serverId, ManagedConfigController::RefreshResult result);
 
 private:
     enum class Plan {
@@ -64,6 +67,13 @@ private:
     };
 
     QNetworkAccessManager *networkManager() const;
+
+    QNetworkReply *requestConfig(const QString &backendUrl, const QString &deviceKey, const QString &revision) const;
+    QJsonObject nativeConfigFrom(const QString &config) const;
+
+    void requestSetupConfig(const ManagedConfigSettings &settings, QStringList pendingBackendUrls, bool connectAfterSetup);
+    void finishSetup(const QString &serverId, RefreshResult result, bool connectAfterSetup);
+    void connectTo(const QString &serverId);
 
     void requestNextBackend(const QString &serverId);
     void handleBackendReply(const QString &serverId, const QString &backendUrl, QNetworkReply *reply);

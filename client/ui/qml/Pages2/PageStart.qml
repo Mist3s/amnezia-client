@@ -214,6 +214,17 @@ PageType {
     }
 
     Connections {
+        target: ManagedConfigController
+
+        function onSetupFinished(isSetUp, message) {
+            if (isSetUp) {
+                PageController.goToPageHome()
+            }
+            PageController.showNotificationMessage(message)
+        }
+    }
+
+    Connections {
         target: SubscriptionUiController
 
         function onErrorOccurred(error) {

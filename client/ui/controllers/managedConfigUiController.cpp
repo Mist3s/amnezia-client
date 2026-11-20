@@ -25,6 +25,11 @@ ManagedConfigUiController::ManagedConfigUiController(ManagedConfigController *ma
                     emit manualRefreshFinished(resultText(result));
                 }
             });
+
+    connect(m_managedConfigController, &ManagedConfigController::setupFinished, this,
+            [this](const QString &serverId, ManagedConfigController::RefreshResult result) {
+                emit setupFinished(!serverId.isEmpty(), resultText(result));
+            });
 }
 
 QString ManagedConfigUiController::backendUrls() const

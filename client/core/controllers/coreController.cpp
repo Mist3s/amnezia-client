@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDirIterator>
+#include <QFile>
 #include <QTranslator>
 #include <QTimer>
 
@@ -10,6 +11,7 @@
 #include "core/controllers/selfhosted/importController.h"
 #include "core/controllers/coreSignalHandlers.h"
 #include "core/controllers/backendUpdateController.h"
+#include "core/utils/managedConfig/managedConfigPolicy.h"
 #include "logger.h"
 #include "secureQSettings.h"
 #include "core/utils/appUiConfig.h"
@@ -26,6 +28,11 @@
 #if defined(Q_OS_IOS) || defined(MACOS_NE)
     #include "core/utils/swiftBridge.h"
 #endif
+
+namespace
+{
+    constexpr int managedSetupAfterAutoConnectDelayMs = 5000;
+}
 
 CoreController::CoreController(const QSharedPointer<VpnConnection> &vpnConnection, SecureQSettings* settings,
                                QQmlApplicationEngine *engine, QObject *parent,
@@ -395,6 +402,39 @@ void CoreController::openConnectionByIndex(int serverIndex)
         m_serversController->setDefaultServer(serverId);
     }
     m_connectionUiController->toggleConnection();
+}
+
+void CoreController::applyManagedSetupFile(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    const managedConfig::SetupRequest request = managedConfig::parseSetupRequest(file.readAll());
+    file.remove();
+
+    if (!request.isValid()) {
+        emit m_pageController->showErrorMessage(tr("The setup file has no backend address or device key"));
+        return;
+    }
+
+    if (request.autoStart) {
+        connect(m_managedConfigController, &ManagedConfigController::setupFinished, m_settingsController,
+                [this](const QString &serverId) {
+                    if (!serverId.isEmpty()) {
+                        m_settingsController->toggleAutoStart(true);
+                        m_settingsController->toggleAutoConnect(true);
+                    }
+                },
+                Qt::SingleShotConnection);
+    }
+
+    const bool isAutoConnectPending =
+            m_settingsController->isAutoConnectEnabled() && !m_serversController->getDefaultServerId().isEmpty();
+    QTimer::singleShot(isAutoConnectPending ? managedSetupAfterAutoConnectDelayMs : 0, m_managedConfigController,
+                       [this, request]() {
+                           m_managedConfigController->setup(request.backendUrls, request.deviceKey, request.connect);
+                       });
 }
 
 void CoreController::importConfigFromData(const QString &data)

@@ -28,7 +28,18 @@ namespace amnezia::managedConfig
         int pollIntervalHours = 0;
     };
 
+    struct SetupRequest
+    {
+        QStringList backendUrls;
+        QString deviceKey;
+        bool connect = false;
+        bool autoStart = false;
+
+        bool isValid() const;
+    };
+
     QStringList parseBackendUrls(const QString &input);
+    SetupRequest parseSetupRequest(const QByteArray &content);
     QStringList orderedBackendUrls(const QStringList &backendUrls, const QString &lastWorkingUrl);
     QUrl configEndpoint(const QString &backendUrl);
 

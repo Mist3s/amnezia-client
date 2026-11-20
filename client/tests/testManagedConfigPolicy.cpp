@@ -19,6 +19,11 @@ private:
                 .toJson();
     }
 
+    static QByteArray setupFile(const QJsonObject &content)
+    {
+        return QJsonDocument(content).toJson();
+    }
+
 private slots:
     void backendUrlsAreSplitAndNormalized()
     {
@@ -46,6 +51,46 @@ private slots:
     {
         QCOMPARE(parseBackendUrls("https://example.org, example.org, https://example.org/"),
                  QStringList({ "https://example.org" }));
+    }
+
+    void setupFileGivesBackendAndKey()
+    {
+        const SetupRequest request = parseSetupRequest(setupFile({ { "backend", "https://One.example.org/, two.example.org" },
+                                                                   { "key", " device-key " },
+                                                                   { "connect", true },
+                                                                   { "autostart", true } }));
+        QVERIFY(request.isValid());
+        QCOMPARE(request.backendUrls, QStringList({ "https://one.example.org", "https://two.example.org" }));
+        QCOMPARE(request.deviceKey, QString("device-key"));
+        QVERIFY(request.connect);
+        QVERIFY(request.autoStart);
+    }
+
+    void setupFileWithByteOrderMarkIsRead()
+    {
+        const SetupRequest request = parseSetupRequest(
+                QByteArray("\xEF\xBB\xBF") + setupFile({ { "backend", "https://example.org" }, { "key", "device-key" } }));
+        QVERIFY(request.isValid());
+        QVERIFY(!request.connect);
+        QVERIFY(!request.autoStart);
+    }
+
+    void setupFileWithoutBackendOrKeyIsInvalid_data()
+    {
+        QTest::addColumn<QByteArray>("content");
+
+        QTest::newRow("empty") << QByteArray();
+        QTest::newRow("not json") << QByteArray("backend=https://example.org");
+        QTest::newRow("no key") << setupFile({ { "backend", "https://example.org" } });
+        QTest::newRow("blank key") << setupFile({ { "backend", "https://example.org" }, { "key", "  " } });
+        QTest::newRow("no backend") << setupFile({ { "key", "device-key" } });
+        QTest::newRow("backend without tls") << setupFile({ { "backend", "http://example.org" }, { "key", "device-key" } });
+    }
+
+    void setupFileWithoutBackendOrKeyIsInvalid()
+    {
+        QFETCH(QByteArray, content);
+        QVERIFY(!parseSetupRequest(content).isValid());
     }
 
     void emptyInputGivesNoBackends()

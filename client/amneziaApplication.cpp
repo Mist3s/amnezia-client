@@ -43,7 +43,8 @@ AmneziaApplication::AmneziaApplication(int &argc, char *argv[]) : AMNEZIA_BASE_C
       m_optAutostart({QStringLiteral("a"), QStringLiteral("autostart")}, QStringLiteral("System autostart")),
       m_optCleanup  ({QStringLiteral("c"), QStringLiteral("cleanup")}, QStringLiteral("Cleanup logs")),
       m_optConnect  ({QStringLiteral("connect")}, QStringLiteral("Connect to server by index on startup"), QStringLiteral("index")),
-      m_optImport   ({QStringLiteral("import")}, QStringLiteral("Import configuration from data string"), QStringLiteral("data"))
+      m_optImport   ({QStringLiteral("import")}, QStringLiteral("Import configuration from data string"), QStringLiteral("data")),
+      m_optManagedSetup({QStringLiteral("managed-setup")}, QStringLiteral("Set up config auto-update from a file with backend address and device key"), QStringLiteral("file"))
 {
     setDesktopFileName(QStringLiteral(APPLICATION_NAME));
     setQuitOnLastWindowClosed(false);
@@ -214,6 +215,15 @@ void AmneziaApplication::init()
     });
 #endif
 
+    if (m_parser.isSet(m_optManagedSetup)) {
+        const QString filePath = m_parser.value(m_optManagedSetup);
+        QTimer::singleShot(0, this, [this, filePath]() {
+            if (m_coreController) {
+                m_coreController->applyManagedSetupFile(filePath);
+            }
+        });
+    }
+
     if (m_parser.isSet(m_optConnect)) {
         bool ok = false;
         int idx = m_parser.value(m_optConnect).toInt(&ok);
@@ -276,6 +286,7 @@ bool AmneziaApplication::parseCommands()
     m_parser.addOption(m_optCleanup);
     m_parser.addOption(m_optConnect);
     m_parser.addOption(m_optImport);
+    m_parser.addOption(m_optManagedSetup);
     
     m_parser.process(*this);
 

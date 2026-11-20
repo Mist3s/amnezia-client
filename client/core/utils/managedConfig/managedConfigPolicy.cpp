@@ -13,6 +13,12 @@ namespace
     constexpr QLatin1String replyConfigKey("config");
     constexpr QLatin1String replyPollIntervalHoursKey("poll_interval_hours");
 
+    constexpr QLatin1String setupBackendKey("backend");
+    constexpr QLatin1String setupDeviceKeyKey("key");
+    constexpr QLatin1String setupConnectKey("connect");
+    constexpr QLatin1String setupAutoStartKey("autostart");
+    constexpr QByteArrayView utf8Bom("\xEF\xBB\xBF");
+
     constexpr int httpOk = 200;
     constexpr int httpNotModified = 304;
     constexpr int httpUnauthorized = 401;
@@ -52,6 +58,24 @@ namespace amnezia::managedConfig
             }
         }
         return urls;
+    }
+
+    bool SetupRequest::isValid() const
+    {
+        return !backendUrls.isEmpty() && !deviceKey.isEmpty();
+    }
+
+    SetupRequest parseSetupRequest(const QByteArray &content)
+    {
+        const QByteArray json = content.startsWith(utf8Bom) ? content.mid(utf8Bom.size()) : content;
+        const QJsonObject object = QJsonDocument::fromJson(json).object();
+
+        SetupRequest request;
+        request.backendUrls = parseBackendUrls(object.value(setupBackendKey).toString());
+        request.deviceKey = object.value(setupDeviceKeyKey).toString().trimmed();
+        request.connect = object.value(setupConnectKey).toBool();
+        request.autoStart = object.value(setupAutoStartKey).toBool();
+        return request;
     }
 
     QStringList orderedBackendUrls(const QStringList &backendUrls, const QString &lastWorkingUrl)

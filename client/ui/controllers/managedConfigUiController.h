@@ -32,6 +32,7 @@ signals:
     void settingsChanged();
     void statusChanged();
     void manualRefreshFinished(const QString &message);
+    void setupFinished(bool isSetUp, const QString &message);
 
 private:
     QString resultText(ManagedConfigController::RefreshResult result) const;

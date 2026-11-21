@@ -167,6 +167,7 @@ private:
     SecureQSettings* m_settings;
     QSharedPointer<VpnConnection> m_vpnConnection;
     QTranslator* m_translator;
+    QTranslator *m_managedConfigTranslator;
 
     SecureServersRepository* m_serversRepository;
     SecureAppSettingsRepository* m_appSettingsRepository;

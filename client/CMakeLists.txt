@@ -107,6 +107,7 @@ else()
         ${CMAKE_CURRENT_LIST_DIR}/translations/${CLIENT_TS_PREFIX}_id_ID.ts
     )
 endif()
+list(APPEND AMNEZIAVPN_TS_FILES ${CMAKE_SOURCE_DIR}/homevpn/translations/homevpn_ru.ts)
 
 file(GLOB_RECURSE AMNEZIAVPN_QML_FILES ${CMAKE_CURRENT_LIST_DIR}/ui/qml/*.qml)
 

@@ -52,6 +52,7 @@ CoreController::CoreController(const QSharedPointer<VpnConnection> &vpnConnectio
     initLogging();
 
     m_translator = new QTranslator(this);
+    m_managedConfigTranslator = new QTranslator(this);
     if (m_appSettingsRepository) {
         updateTranslator(m_appSettingsRepository->getAppLanguage());
     }
@@ -367,6 +368,12 @@ void CoreController::updateTranslator(const QLocale &locale)
         if (m_translator->load(QString(":/translations/" APP_TS_PREFIX "_en.qm"))) {
             QCoreApplication::installTranslator(m_translator);
         }
+    }
+
+    QCoreApplication::removeTranslator(m_managedConfigTranslator);
+    if (m_managedConfigTranslator->load(locale, QStringLiteral("homevpn"), QStringLiteral("_"),
+                                        QStringLiteral(":/translations"))) {
+        QCoreApplication::installTranslator(m_managedConfigTranslator);
     }
 
     if (m_engine) {

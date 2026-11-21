@@ -6,6 +6,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QProcess>
 #include <QStandardPaths>
 #include <QtConcurrent>
 
@@ -46,6 +47,30 @@ namespace
     {
         return installerDirectory() + '/' + installerFileName;
     }
+
+#if defined(Q_OS_WINDOWS) || (defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID))
+    bool startInstallerAfterExit(const QString &installerPath)
+    {
+        const QString applicationPid = QString::number(QCoreApplication::applicationPid());
+        QProcess process;
+    #if defined(Q_OS_WINDOWS)
+        process.setProgram("powershell.exe");
+        process.setArguments(
+                { "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command",
+                  "Wait-Process -Id " + applicationPid
+                          + " -ErrorAction SilentlyContinue; Start-Process -FilePath $env:HOMEVPN_INSTALLER" });
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("HOMEVPN_INSTALLER", installerPath);
+        process.setProcessEnvironment(environment);
+    #else
+        QFile::setPermissions(installerPath, QFile::permissions(installerPath) | QFile::ExeUser);
+        process.setProgram("/bin/sh");
+        process.setArguments({ "-c", "while kill -0 \"$1\" 2>/dev/null; do sleep 0.5; done; exec \"$2\"", "sh",
+                               applicationPid, installerPath });
+    #endif
+        return process.startDetached();
+    }
+#endif
 
     int httpStatusOf(QNetworkReply *reply)
     {
@@ -290,9 +315,12 @@ void BackendUpdateController::installUpdate()
 
 #if defined(Q_OS_ANDROID)
     AndroidController::instance()->installApk(m_installerPath);
-#elif defined(Q_OS_WINDOWS)
-    runWindowsInstaller(m_installerPath);
-#elif defined(Q_OS_LINUX)
-    runLinuxInstaller(m_installerPath);
+#elif defined(Q_OS_WINDOWS) || defined(Q_OS_LINUX)
+    if (!startInstallerAfterExit(m_installerPath)) {
+        logger.error() << "Failed to start the installer";
+        return;
+    }
+    logger.info() << "Quitting so that the installer can replace the application";
+    QCoreApplication::quit();
 #endif
 }

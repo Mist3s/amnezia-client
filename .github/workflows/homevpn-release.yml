@@ -26,6 +26,8 @@ jobs:
         sparse-checkout: |
           CMakeLists.txt
           homevpn/version.sh
+          homevpn/changelog.py
+          homevpn/changelog.json
         sparse-checkout-cone-mode: false
 
     - name: 'Compute version'
@@ -35,6 +37,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         version="$(homevpn/version.sh "$BUILD_NUMBER")"
+        python3 homevpn/changelog.py "$BUILD_NUMBER"
         if gh release view "homevpn-$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
           echo "::error::release homevpn-$version already exists, take the next build number"
           exit 1
@@ -306,7 +309,10 @@ jobs:
     - name: 'Get sources'
       uses: actions/checkout@v4
       with:
-        sparse-checkout: homevpn/release-manifest.py
+        sparse-checkout: |
+          homevpn/release-manifest.py
+          homevpn/changelog.py
+          homevpn/changelog.json
         sparse-checkout-cone-mode: false
 
     - name: 'Download builds'
@@ -320,7 +326,11 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         VERSION: ${{ needs.Version.outputs.version }}
+        BUILD_NUMBER: ${{ inputs.build_number }}
       run: |
-        python3 homevpn/release-manifest.py "$VERSION" dist
+        python3 homevpn/changelog.py "$BUILD_NUMBER" > "$RUNNER_TEMP/changes.json"
+        python3 homevpn/changelog.py "$BUILD_NUMBER" --markdown > "$RUNNER_TEMP/release-notes.md"
+        python3 homevpn/release-manifest.py "$VERSION" dist "$RUNNER_TEMP/changes.json"
         gh release create "homevpn-$VERSION" dist/*.apk dist/*.run dist/*.exe dist/homevpn-release.json \
-          --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "HomeVPN $VERSION" --notes "HomeVPN $VERSION" --latest
+          --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "HomeVPN $VERSION" \
+          --notes-file "$RUNNER_TEMP/release-notes.md" --latest

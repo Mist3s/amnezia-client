@@ -215,12 +215,12 @@ void BackendUpdateController::announceOffer(const amnezia::managedUpdate::Update
     }
 
     m_version = offer.version;
-    m_releaseDate.clear();
+    m_releaseDate = offer.releaseDate;
     m_description.clear();
     m_tags.clear();
-    m_newFeatures.clear();
-    m_improvements.clear();
-    m_bugFixes.clear();
+    m_newFeatures = offer.newFeatures;
+    m_improvements = offer.improvements;
+    m_bugFixes = offer.bugFixes;
 
     logger.info() << "Application update available:" << m_version;
     emit updateFound();

@@ -3,6 +3,7 @@
 #include <QCryptographicHash>
 #include <QFile>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
@@ -18,6 +19,11 @@ namespace
     constexpr QLatin1String replyVersionKey("version");
     constexpr QLatin1String replyUrlKey("url");
     constexpr QLatin1String replySha256Key("sha256");
+    constexpr QLatin1String replyReleaseDateKey("release_date");
+    constexpr QLatin1String replyChangesKey("changes");
+    constexpr QLatin1String changesNewKey("new");
+    constexpr QLatin1String changesImprovedKey("improved");
+    constexpr QLatin1String changesFixedKey("fixed");
 
     constexpr int httpOk = 200;
     constexpr int httpUnauthorized = 401;
@@ -27,6 +33,19 @@ namespace
     {
         static const QRegularExpression pattern("^[0-9a-f]{64}$");
         return pattern.match(value).hasMatch();
+    }
+
+    QStringList changeLines(const QJsonValue &value)
+    {
+        QStringList lines;
+        const QJsonArray items = value.toArray();
+        for (const QJsonValue &item : items) {
+            const QString line = item.toString().simplified();
+            if (!line.isEmpty()) {
+                lines.append(line);
+            }
+        }
+        return lines;
     }
 }
 
@@ -114,6 +133,12 @@ namespace amnezia::managedUpdate
         decision.offer.version = reply.value(replyVersionKey).toString();
         decision.offer.fileUrl = fileUrl(backendUrl, reply.value(replyUrlKey).toString());
         decision.offer.sha256 = reply.value(replySha256Key).toString().toLower();
+        decision.offer.releaseDate = reply.value(replyReleaseDateKey).toString();
+
+        const QJsonObject changes = reply.value(replyChangesKey).toObject();
+        decision.offer.newFeatures = changeLines(changes.value(changesNewKey));
+        decision.offer.improvements = changeLines(changes.value(changesImprovedKey));
+        decision.offer.bugFixes = changeLines(changes.value(changesFixedKey));
 
         if (!decision.offer.isValid()) {
             return decision;

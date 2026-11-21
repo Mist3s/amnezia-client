@@ -3,6 +3,7 @@
 
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
 
 namespace amnezia::managedUpdate
@@ -20,6 +21,10 @@ namespace amnezia::managedUpdate
         QString version;
         QUrl fileUrl;
         QString sha256;
+        QString releaseDate;
+        QStringList newFeatures;
+        QStringList improvements;
+        QStringList bugFixes;
 
         bool isValid() const;
     };

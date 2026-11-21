@@ -1,3 +1,4 @@
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -74,6 +75,32 @@ private slots:
         QCOMPARE(decision.offer.version, QString("5.2.0.1"));
         QCOMPARE(decision.offer.fileUrl.toString(), QString("https://backend.example.org/base/v1/files/app.apk"));
         QCOMPARE(decision.offer.sha256, sha256OfAbc);
+    }
+
+    void offerCarriesWhatChanged()
+    {
+        QJsonObject reply = QJsonDocument::fromJson(offerBody("5.2.0.1", "v1/files/app.apk", sha256OfAbc)).object();
+        reply.insert("release_date", "2026-11-21");
+        reply.insert("changes",
+                     QJsonObject { { "new", QJsonArray { "  Tile in  quick settings ", "", 7 } },
+                                   { "improved", "not a list" },
+                                   { "fixed", QJsonArray { "Crash on start" } } });
+
+        const UpdateOffer offer = decideOnReply(200, QJsonDocument(reply).toJson(), backendUrl, "5.1.1.11").offer;
+        QCOMPARE(offer.releaseDate, QString("2026-11-21"));
+        QCOMPARE(offer.newFeatures, QStringList { "Tile in quick settings" });
+        QCOMPARE(offer.improvements, QStringList());
+        QCOMPARE(offer.bugFixes, QStringList { "Crash on start" });
+    }
+
+    void offerWithoutChangesIsStillOffered()
+    {
+        const ReplyDecision decision =
+                decideOnReply(200, offerBody("5.2.0.1", "v1/files/app.apk", sha256OfAbc), backendUrl, "5.1.1.11");
+        QCOMPARE(decision.action, ReplyAction::Offer);
+        QVERIFY(decision.offer.newFeatures.isEmpty() && decision.offer.improvements.isEmpty()
+                && decision.offer.bugFixes.isEmpty());
+        QVERIFY(decision.offer.releaseDate.isEmpty());
     }
 
     void sameOrOlderVersionIsNotOffered()

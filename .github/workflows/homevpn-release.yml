@@ -1,0 +1,326 @@
+name: 'HomeVPN Release'
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'HomeVPN build number (only grows, never reset)'
+        required: true
+
+env:
+  QIF_VERSION: 4.7
+  QT_MIRROR: https://mirrors.ocf.berkeley.edu/qt/
+  CONAN_VERSION: 2.28.0
+
+jobs:
+  Version:
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+    - name: 'Get sources'
+      uses: actions/checkout@v4
+      with:
+        sparse-checkout: |
+          CMakeLists.txt
+          homevpn/version.sh
+        sparse-checkout-cone-mode: false
+
+    - name: 'Compute version'
+      id: version
+      env:
+        BUILD_NUMBER: ${{ inputs.build_number }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        version="$(homevpn/version.sh "$BUILD_NUMBER")"
+        if gh release view "homevpn-$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          echo "::error::release homevpn-$version already exists, take the next build number"
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+# ------------------------------------------------------
+
+  Build-Android:
+    runs-on: ubuntu-22.04
+
+    needs: Version
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - min_sdk: 30
+            abi: 'arm64-v8a'
+            qt_arch: 'android_arm64_v8a'
+            qt_version: '6.10.3'
+          - min_sdk: 30
+            abi: 'armeabi-v7a'
+            qt_arch: 'android_armv7'
+            qt_version: '6.10.3'
+          - min_sdk: 28
+            abi: 'armeabi-v7a'
+            qt_arch: 'android_armv7'
+            qt_version: '6.10.1'
+
+    env:
+      QT_VERSION: ${{ matrix.qt_version }}
+      QT_MODULES: 'qtremoteobjects qt5compat qtimageformats qtshadertools'
+      ANDROID_NDK_VERSION: 27.0.11718014
+      ANDROID_COMPILE_PLATFORM: android-36
+      ANDROID_BUILD_TOOLS_VERSION: 36.0.0
+
+    steps:
+    - name: 'Get sources'
+      uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+
+    - name: 'Install desktop Qt'
+      uses: jurplel/install-qt-action@v4.3.1
+      with:
+        version: ${{ env.QT_VERSION }}
+        host: 'linux'
+        target: 'desktop'
+        arch: 'linux_gcc_64'
+        modules: ${{ env.QT_MODULES }}
+        dir: ${{ runner.temp }}
+        py7zrversion: '==0.22.*'
+        extra: '--base ${{ env.QT_MIRROR }}'
+
+    - name: 'Install ${{ matrix.qt_arch }} Qt'
+      uses: jurplel/install-qt-action@v4.3.1
+      with:
+        version: ${{ env.QT_VERSION }}
+        host: 'all_os'
+        target: 'android'
+        arch: ${{ matrix.qt_arch }}
+        modules: ${{ env.QT_MODULES }}
+        dir: ${{ runner.temp }}
+        py7zrversion: '==0.22.*'
+        extra: '--base ${{ env.QT_MIRROR }}'
+
+    - name: 'Setup Java'
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: 'Install Android SDK'
+      run: |
+        sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+        sdk="$RUNNER_TEMP/android-sdk"
+        (yes || true) | "$sdkmanager" --sdk_root="$sdk" --licenses > /dev/null
+        "$sdkmanager" --sdk_root="$sdk" "platforms;$ANDROID_COMPILE_PLATFORM" "build-tools;$ANDROID_BUILD_TOOLS_VERSION" "ndk;$ANDROID_NDK_VERSION"
+        ndk="$sdk/ndk/$ANDROID_NDK_VERSION"
+        printf '%s\n' "ANDROID_HOME=$sdk" "ANDROID_SDK_ROOT=$sdk" "ANDROID_NDK_ROOT=$ndk" "ANDROID_NDK_HOME=$ndk" "ANDROID_NDK=$ndk" >> "$GITHUB_ENV"
+
+    - name: 'Setup python'
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.14
+
+    - name: 'Install conan'
+      run: pip install "conan==$CONAN_VERSION"
+
+    - name: 'Put the signing key in place'
+      env:
+        KEYSTORE_BASE64: ${{ secrets.HOMEVPN_KEYSTORE_BASE64 }}
+        KEYSTORE_PASS: ${{ secrets.HOMEVPN_KEYSTORE_PASS }}
+      run: |
+        if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASS" ]; then
+          echo "::error::set the HOMEVPN_KEYSTORE_BASE64 and HOMEVPN_KEYSTORE_PASS repository secrets"
+          exit 1
+        fi
+        umask 077
+        base64 --decode <<< "$KEYSTORE_BASE64" > "$RUNNER_TEMP/homevpn-release.p12"
+        printf '%s' "$KEYSTORE_PASS" > "$RUNNER_TEMP/keystore.pass"
+
+    - name: 'Build project'
+      env:
+        QT_INSTALL_DIR: ${{ runner.temp }}
+        HOMEVPN_KEYSTORE: ${{ runner.temp }}/homevpn-release.p12
+        HOMEVPN_KEYSTORE_PASS_FILE: ${{ runner.temp }}/keystore.pass
+        OUT_DIR: ${{ github.workspace }}/deploy/artifacts
+        BUILD_NUMBER: ${{ inputs.build_number }}
+        JOBS: 4
+      run: homevpn/android-apk.sh "${{ matrix.min_sdk }}" "${{ matrix.abi }}" "$BUILD_NUMBER"
+
+    - name: 'Upload APK'
+      uses: actions/upload-artifact@v7
+      with:
+        name: homevpn-android-${{ matrix.abi }}-api${{ matrix.min_sdk }}
+        path: deploy/artifacts/
+        compression-level: 0
+        if-no-files-found: error
+        retention-days: 30
+
+# ------------------------------------------------------
+
+  Build-Linux:
+    runs-on: ubuntu-22.04
+
+    needs: Version
+
+    env:
+      QT_VERSION: 6.10.1
+      HOMEVPN_VERSION: ${{ needs.Version.outputs.version }}
+
+    steps:
+    - name: 'Install Qt'
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        host: 'linux'
+        target: 'desktop'
+        arch: 'linux_gcc_64'
+        modules: 'qtremoteobjects qt5compat qtshadertools qthttpserver qtwebsockets'
+        dir: ${{ runner.temp }}
+        setup-python: 'true'
+        tools: 'tools_ifw'
+        set-env: 'true'
+        aqtversion: '==3.3.0'
+        py7zrversion: '==0.22.*'
+        extra: '--base ${{ env.QT_MIRROR }}'
+
+    - name: 'Setup python'
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.14
+
+    - name: 'Install conan'
+      run: pip install "conan==$CONAN_VERSION"
+
+    - name: 'Install system packages'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxkbcommon-x11-0 libsecret-1-dev
+
+    - name: 'Get sources'
+      uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+        fetch-depth: 10
+
+    - name: 'Build project'
+      env:
+        QT_INSTALL_DIR: ${{ runner.temp }}
+        AMNEZIA_BUILD_TESTS: ON
+      run: |
+        export EXTRA_CMAKE_ARGS="-DAMNEZIAVPN_VERSION=$HOMEVPN_VERSION -DCONAN_HOST_PROFILE=default;auto-cmake;$GITHUB_WORKSPACE/homevpn/conan-pin-zlib.profile"
+        deploy/build.sh --generator Ninja --installer all
+
+    - name: 'Run HomeVPN tests'
+      run: |
+        export LD_LIBRARY_PATH="$PWD/deploy/build/client/tests:$RUNNER_TEMP/Qt/$QT_VERSION/gcc_64/lib:${LD_LIBRARY_PATH:-}"
+        export QT_QPA_PLATFORM=offscreen
+        ctest --test-dir deploy/build/client/tests --output-on-failure --no-tests=error --timeout 600 -R '^(ManagedConfigPolicyTest|ManagedUpdatePolicyTest)$'
+
+    - name: 'Upload installer'
+      uses: actions/upload-artifact@v7
+      with:
+        name: homevpn-linux
+        path: deploy/build/AmneziaVPN_*_linux_x64.run
+        compression-level: 0
+        if-no-files-found: error
+        retention-days: 30
+
+# ------------------------------------------------------
+
+  Build-Windows:
+    runs-on: windows-latest
+
+    needs: Version
+
+    env:
+      QT_VERSION: 6.10.1
+      HOMEVPN_VERSION: ${{ needs.Version.outputs.version }}
+
+    steps:
+    - name: 'Get sources'
+      uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+        fetch-depth: 10
+
+    - name: 'Install Qt'
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: ${{ env.QT_VERSION }}
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2022_64'
+        modules: 'qtremoteobjects qt5compat qtshadertools qthttpserver qtwebsockets'
+        dir: ${{ runner.temp }}
+        setup-python: 'true'
+        tools: 'tools_ifw'
+        set-env: 'true'
+        aqtversion: '==3.3.0'
+        py7zrversion: '==0.22.*'
+        extra: '--base ${{ env.QT_MIRROR }}'
+
+    - name: 'Setup msvc'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: 'x64'
+
+    - name: 'Setup python'
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.14
+
+    - name: 'Install conan'
+      run: pip install "conan==${{ env.CONAN_VERSION }}"
+
+    - name: 'Build project'
+      shell: cmd
+      env:
+        QT_ROOT: ${{ runner.temp }}\Qt
+      run: |
+        cmake -S . -B deploy\build -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=%QT_ROOT%\%QT_VERSION%\msvc2022_64" "-DCMAKE_VS_GLOBALS=UseMultiToolTask=true;EnforceProcessCountAcrossBuilds=true" -DAMNEZIAVPN_VERSION=%HOMEVPN_VERSION% "-DCONAN_HOST_PROFILE=default;auto-cmake;%GITHUB_WORKSPACE%\homevpn\conan-pin-zlib.profile" || exit /b 1
+        cmake --build deploy\build --config Release -- /m || exit /b 1
+        cd deploy\build && cpack -G IFW -D "QTIFWDIR=%QT_ROOT%\Tools\QtInstallerFramework\%QIF_VERSION%" || exit /b 1
+
+    - name: 'Upload installer'
+      uses: actions/upload-artifact@v7
+      with:
+        name: homevpn-windows
+        path: deploy/build/AmneziaVPN_*_windows_x64.exe
+        compression-level: 0
+        if-no-files-found: error
+        retention-days: 30
+
+# ------------------------------------------------------
+
+  Publish:
+    runs-on: ubuntu-latest
+
+    needs: [Version, Build-Android, Build-Linux, Build-Windows]
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: 'Get sources'
+      uses: actions/checkout@v4
+      with:
+        sparse-checkout: homevpn/release-manifest.py
+        sparse-checkout-cone-mode: false
+
+    - name: 'Download builds'
+      uses: actions/download-artifact@v8
+      with:
+        pattern: 'homevpn-*'
+        path: dist
+        merge-multiple: true
+
+    - name: 'Publish release'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ needs.Version.outputs.version }}
+      run: |
+        python3 homevpn/release-manifest.py "$VERSION" dist
+        gh release create "homevpn-$VERSION" dist/*.apk dist/*.run dist/*.exe dist/homevpn-release.json \
+          --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "HomeVPN $VERSION" --notes "HomeVPN $VERSION" --latest

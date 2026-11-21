@@ -18,6 +18,8 @@
   устройства с последним использованным сервером; окно приложения при этом не открывается.
 - **Пульт телевизора.** Рамка выделения на Android толще; на телевизоре при открытии страницы сразу выделен
   её первый элемент (на главной — кнопка подключения).
+- **Плитка быстрых настроек Android** (там же, где Wi-Fi и Bluetooth) подписана названием приложения,
+  а не именем сервера; значок — наш.
 
 Всё остальное работает как в оригинале. Пока адрес бэкенда не задан, приложение ведёт себя как AmneziaVPN.
 
@@ -38,7 +40,8 @@
 | Русский перевод надписей форка (файлы перевода оригинала не тронуты) | `homevpn/translations/homevpn_ru.ts` |
 | Включение VPN при загрузке Android | `client/android/src/org/amnezia/vpn/BootReceiver.kt` |
 | Тесты | `client/tests/testManagedConfigPolicy.cpp`, `client/tests/testManagedUpdatePolicy.cpp` |
-| Сборка | `homevpn/android-apk.sh`, `homevpn/conan-pin-zlib.profile`, `.github/workflows/homevpn-windows.yml` |
+| Сборка | `homevpn/android-apk.sh`, `homevpn/version.sh`, `homevpn/conan-pin-zlib.profile` |
+| Сборка и релиз на GitHub | `.github/workflows/homevpn-release.yml`, `homevpn/release-manifest.py` |
 
 Проверка сертификата — штатный TLS Qt, sha256 — `QCryptographicHash`, установка APK — системный установщик Android.
 Своей криптографии в форке нет.
@@ -107,6 +110,7 @@ Config auto-update, Save и Update config.
 
 ## Как собрать
 
+Проще всего собирать на GitHub — см. «На GitHub: все сборки сразу». Ниже — как собрать у себя.
 Общее для всех платформ — как в оригинале, см. раздел «Hacking guide» в [README.md](README.md):
 Qt 6.10, CMake, Ninja, Conan 2, для Android — SDK, NDK 27 и Java 17.
 
@@ -114,7 +118,7 @@ Qt 6.10, CMake, Ninja, Conan 2, для Android — SDK, NDK 27 и Java 17.
 
 Версия HomeVPN = версия оригинала, где последнее число умножено на 100 и к нему прибавлен номер моей сборки.
 Оригинал `5.1.1.11`, сборка `1` → `5.1.1.1101`. Номер сборки общий для всех платформ, только растёт
-и не сбрасывается, даже когда меняется версия оригинала.
+и не сбрасывается, даже когда меняется версия оригинала. Посчитать версию: `homevpn/version.sh 1`.
 
 ### Android
 
@@ -133,7 +137,8 @@ homevpn/android-apk.sh 28 armeabi-v7a 2   # приставки, Android 9–10
 
 Аргументы: минимальный Android SDK (`28` — сборка для Android 9–10, `30` — для Android 11 и новее),
 архитектура, номер сборки. Для `28` нужен Qt 6.10.1, для `30` — Qt 6.10.3 (так же собирает оригинал).
-Готовый файл: `deploy/build-homevpn/out/HomeVPN_<версия>_<abi>_api<sdk>.apk`.
+Готовый файл: `deploy/build-homevpn/out/HomeVPN_<версия>_<abi>_api<sdk>.apk`. Рядом ложится `<имя>.apk.json`
+с описанием, для каких устройств сборка, — из него собирается список файлов релиза.
 
 Идентификатор приложения — `dev.homevpn.app`, поэтому HomeVPN ставится рядом с AmneziaVPN и не мешает ему.
 
@@ -158,10 +163,25 @@ EXTRA_CMAKE_ARGS="-DAMNEZIAVPN_VERSION=5.1.1.1102 -DCONAN_HOST_PROFILE=default;a
 
 ### Windows
 
-Собирается в GitHub Actions: Actions → **HomeVPN Windows** → Run workflow → указать номер сборки.
-Установщик `AmneziaVPN_<версия>_windows_x64.exe` появится в артефактах запуска.
+Собирается только на GitHub (см. ниже). Установщик: `AmneziaVPN_<версия>_windows_x64.exe`.
 
 На ПК сборка не переименована: она называется AmneziaVPN и ставится **вместо** официального клиента.
+
+### На GitHub: все сборки сразу
+
+Actions → **HomeVPN Release** → Run workflow → указать номер сборки. Сценарий
+`.github/workflows/homevpn-release.yml` собирает три APK, установщики для Linux и Windows, прогоняет тесты форка
+и выкладывает всё релизом `homevpn-<версия>`. В релизе лежит `homevpn-release.json` — имена файлов,
+их sha256 и для чего каждый; по нему бэкенд забирает сборки.
+
+Один раз в настройках репозитория (Settings → Secrets and variables → Actions) задаются секреты для подписи APK:
+
+```sh
+base64 -w0 /путь/вне/репозитория/homevpn-release.p12 | gh secret set HOMEVPN_KEYSTORE_BASE64
+tr -d '\r\n' < /путь/вне/репозитория/keystore.pass | gh secret set HOMEVPN_KEYSTORE_PASS
+```
+
+Если релиз с таким номером уже есть, сценарий сразу остановится: номер надо взять следующий.
 
 ### Тесты
 
@@ -173,9 +193,12 @@ ctest -R 'ManagedConfigPolicyTest|ManagedUpdatePolicyTest'
 ## Как выпустить версию
 
 1. Взять следующий номер сборки (на единицу больше прошлого).
-2. Собрать все нужные варианты с этим номером (см. выше).
-3. Загрузить файлы на бэкенд — sha256 он посчитает сам. В панели админа: Версии → Загрузить версию
-   (версия, архитектура и Android API подставятся из имени файла). Или командой на сервере:
+2. Собрать все варианты: на GitHub — Actions → **HomeVPN Release** → Run workflow с этим номером.
+3. В панели админа: Версии → GitHub → **«Подтянуть в панель»**. Бэкенд скачает файлы релиза, сверит sha256
+   и опубликует их.
+
+   Сборки, сделанные у себя, загружаются вручную — sha256 бэкенд посчитает сам. В панели: Версии →
+   Загрузить версию (версия, архитектура и Android API подставятся из имени файла). Или командой на сервере:
 
    ```sh
    cp HomeVPN_5.1.1.1102_arm64-v8a_api30.apk data/
@@ -243,6 +266,9 @@ git rebase upstream/dev
 ```
 
 Конфликты возможны только в немногих тронутых файлах оригинала (`git diff --stat upstream/dev`).
+
+Когда у оригинала выходит релиз, которого в ветке ещё нет, панель админа показывает это на вкладке «Версии»
+(раздел «GitHub») — пора влить изменения и выпустить новую версию.
 
 ## Ограничения
 

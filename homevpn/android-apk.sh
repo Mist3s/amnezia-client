@@ -1,7 +1,6 @@
 #!/bin/bash
 # Signed HomeVPN APK. Usage: homevpn/android-apk.sh <min sdk: 28|30> <abi> <build number>
-# Version = upstream version with the last number multiplied by 100 plus the build number:
-# upstream 5.1.1.11, build 1 -> 5.1.1.1101. The build number only grows and is never reset.
+# The version comes from homevpn/version.sh.
 # Needs HOMEVPN_KEYSTORE (PKCS12 file kept outside the repository) and HOMEVPN_KEYSTORE_PASS_FILE.
 set -e
 
@@ -12,17 +11,17 @@ BUILD_NUMBER="${3:?build number}"
 : "${HOMEVPN_KEYSTORE_PASS_FILE:?path to the file with the keystore password}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-UPSTREAM_VERSION="$(sed -n 's/^ *set(AMNEZIAVPN_VERSION \([0-9.]*\) .*/\1/p' "$ROOT/CMakeLists.txt")"
-[ -n "$UPSTREAM_VERSION" ] || { echo "cannot read the upstream version" >&2; exit 1; }
-VERSION="${UPSTREAM_VERSION%.*}.$(( ${UPSTREAM_VERSION##*.} * 100 + BUILD_NUMBER ))"
+VERSION="$("$ROOT/homevpn/version.sh" "$BUILD_NUMBER")"
 
 export APP_ANDROID_MIN_SDK="$MIN_SDK"
 if [ "$MIN_SDK" -ge 30 ]; then
     : "${QT_VERSION:=6.10.3}"
+    MAX_SDK=null
     export APP_ANDROID_VERSION_CODE_OFFSET=$(( BUILD_NUMBER * 2 + 1 ))
 else
     : "${QT_VERSION:=6.10.1}"
-    export APP_ANDROID_MAX_SDK=29 APP_ANDROID_VERSION_CODE_OFFSET=$(( BUILD_NUMBER * 2 ))
+    MAX_SDK=29
+    export APP_ANDROID_MAX_SDK="$MAX_SDK" APP_ANDROID_VERSION_CODE_OFFSET=$(( BUILD_NUMBER * 2 ))
 fi
 export QT_VERSION
 export ANDROID_APPLICATION_ID="dev.homevpn.app"
@@ -42,4 +41,5 @@ nice -n 19 deploy/build.sh -t android --sign --abi "$ABI" -b "$BUILD_DIR"
 
 mkdir -p "$OUT_DIR"
 cp "$BUILD_DIR/client/android-build/build/outputs/apk/android-build-release-signed.apk" "$OUT_DIR/$APK_NAME"
+printf '{"abi": "%s", "min_sdk": %s, "max_sdk": %s}\n' "$ABI" "$MIN_SDK" "$MAX_SDK" > "$OUT_DIR/$APK_NAME.json"
 echo "$OUT_DIR/$APK_NAME"

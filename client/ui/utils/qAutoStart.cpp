@@ -31,6 +31,10 @@
 #include <QFile>
 #include <QDir>
 
+#if defined(Q_OS_ANDROID)
+#include "platforms/android/android_controller.h"
+#endif
+
 #if defined (Q_OS_WIN)
 #define REG_KEY "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 
@@ -95,6 +99,19 @@ QString Autostart::appPath() {
     QString absolutePath = appDir.absolutePath();
 
     return absolutePath;
+}
+
+#elif defined(Q_OS_ANDROID)
+bool Autostart::isAutostart() {
+    return AndroidController::instance()->isAutostartEnabled();
+}
+
+void Autostart::setAutostart(bool autostart) {
+    AndroidController::instance()->setAutostartEnabled(autostart);
+}
+
+QString Autostart::appPath() {
+    return QString();
 }
 
 #elif defined (Q_OS_LINUX)

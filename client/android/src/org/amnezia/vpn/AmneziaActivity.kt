@@ -978,6 +978,15 @@ class AmneziaActivity : QtActivity() {
     fun isCameraPresent(): Boolean = applicationContext.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA)
 
     @Suppress("unused")
+    fun isAutostartEnabled(): Boolean = BootReceiver.isEnabled(applicationContext)
+
+    @Suppress("unused")
+    fun setAutostartEnabled(enabled: Boolean) {
+        Log.d(TAG, "Set autostart: $enabled")
+        BootReceiver.setEnabled(applicationContext, enabled)
+    }
+
+    @Suppress("unused")
     fun isOnTv(): Boolean = applicationContext.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
 
     @Suppress("unused")

@@ -37,6 +37,9 @@ public:
 
     QStringList managedServerIds() const;
 
+    bool isAutoStartDefaultApplied() const;
+    void markAutoStartDefaultApplied();
+
 private:
     QVariantMap storedSettings() const;
 

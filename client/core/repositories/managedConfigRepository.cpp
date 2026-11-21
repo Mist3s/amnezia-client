@@ -3,6 +3,7 @@
 namespace
 {
     constexpr QLatin1String storageKey("Conf/managedConfigs");
+    constexpr QLatin1String autoStartDefaultAppliedKey("Conf/managedAutoStartDefaultApplied");
 
     constexpr QLatin1String backendUrlsKey("backendUrls");
     constexpr QLatin1String deviceKeyKey("deviceKey");
@@ -88,6 +89,16 @@ QStringList ManagedConfigRepository::managedServerIds() const
         }
     }
     return serverIds;
+}
+
+bool ManagedConfigRepository::isAutoStartDefaultApplied() const
+{
+    return m_settings->value(autoStartDefaultAppliedKey, false).toBool();
+}
+
+void ManagedConfigRepository::markAutoStartDefaultApplied()
+{
+    m_settings->setValue(autoStartDefaultAppliedKey, true);
 }
 
 QVariantMap ManagedConfigRepository::storedSettings() const

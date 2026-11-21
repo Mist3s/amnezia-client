@@ -247,6 +247,16 @@ bool AndroidController::isCameraPresent()
     return callActivityMethod<jboolean>("isCameraPresent", "()Z");
 }
 
+bool AndroidController::isAutostartEnabled()
+{
+    return callActivityMethod<jboolean>("isAutostartEnabled", "()Z");
+}
+
+void AndroidController::setAutostartEnabled(bool enabled)
+{
+    callActivityMethod("setAutostartEnabled", "(Z)V", enabled);
+}
+
 bool AndroidController::isOnTv()
 {
     return callActivityMethod<jboolean>("isOnTv", "()Z");

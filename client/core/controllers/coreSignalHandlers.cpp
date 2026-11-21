@@ -346,9 +346,15 @@ void CoreSignalHandlers::initLanguageHandler()
 
 void CoreSignalHandlers::initAutoConnectHandler()
 {
+    m_coreController->applyAutoStartDefault();
     if (m_coreController->m_settingsUiController->isAutoConnectEnabled()
         && !m_coreController->m_serversController->getDefaultServerId().isEmpty()) {
-        QTimer::singleShot(1000, this, [this]() { m_coreController->m_connectionUiController->toggleConnection(); });
+        QTimer::singleShot(1000, this, [this]() {
+            ConnectionUiController *connection = m_coreController->m_connectionUiController;
+            if (!connection->isConnected() && !connection->isConnectionInProgress()) {
+                connection->toggleConnection();
+            }
+        });
     }
 }
 

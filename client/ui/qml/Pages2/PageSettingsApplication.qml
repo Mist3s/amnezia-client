@@ -92,10 +92,11 @@ PageType {
 
                     Layout.fillWidth: true
 
-                    visible: !GC.isMobile()
+                    visible: !GC.isMobile() || Qt.platform.os === "android"
 
                     text: qsTr("Auto start")
-                    subtitle: qsTr("Launch the application every time the device is starts")
+                    subtitle: Qt.platform.os === "android" ? qsTr("Turn the VPN on every time the device starts")
+                                                           : qsTr("Launch the application every time the device is starts")
 
                     onClicked: {
                         switcherAutoStart.toggle()
@@ -121,7 +122,7 @@ PageType {
 
                     Layout.fillWidth: true
 
-                    visible: !GC.isMobile()
+                    visible: !GC.isMobile() || Qt.platform.os === "android"
 
                     text: qsTr("Auto connect")
                     subtitle: qsTr("Connect to VPN on app start")

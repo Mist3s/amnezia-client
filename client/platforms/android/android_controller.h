@@ -37,6 +37,8 @@ public:
     bool saveFile(const QString &fileName, const QByteArray &data, const QString &mime, bool *cancelled = nullptr);
     void shareFile(const QString &path, const QString &mime);
     void installApk(const QString &path);
+    bool isAutostartEnabled();
+    void setAutostartEnabled(bool enabled);
     QString openFile(const QString &filter);
     int getFd(const QString &fileName);
     void closeFd();

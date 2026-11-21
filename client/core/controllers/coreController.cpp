@@ -434,6 +434,7 @@ void CoreController::applyManagedSetup(const QByteArray &setupData)
         return;
     }
 
+    m_managedConfigRepository->markAutoStartDefaultApplied();
     if (request.autoStart) {
         connect(m_managedConfigController, &ManagedConfigController::setupFinished, m_settingsController,
                 [this](const QString &serverId) {
@@ -446,6 +447,17 @@ void CoreController::applyManagedSetup(const QByteArray &setupData)
     }
 
     m_managedConfigController->setup(request.backendUrls, request.deviceKey, request.connect);
+}
+
+void CoreController::applyAutoStartDefault()
+{
+    if (m_managedConfigRepository->isAutoStartDefaultApplied()
+        || m_managedConfigRepository->managedServerIds().isEmpty()) {
+        return;
+    }
+    m_managedConfigRepository->markAutoStartDefaultApplied();
+    m_settingsController->toggleAutoStart(true);
+    m_settingsController->toggleAutoConnect(true);
 }
 
 void CoreController::importConfigFromData(const QString &data)

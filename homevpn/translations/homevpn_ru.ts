@@ -44,6 +44,13 @@
     </message>
 </context>
 <context>
+    <name>PageSettingsApplication</name>
+    <message>
+        <source>Turn the VPN on every time the device starts</source>
+        <translation>Включать VPN при каждом запуске устройства</translation>
+    </message>
+</context>
+<context>
     <name>PageSettingsManagedConfig</name>
     <message>
         <source>Config auto-update</source>

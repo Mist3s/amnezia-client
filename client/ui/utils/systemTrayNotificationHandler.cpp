@@ -15,6 +15,7 @@
 #include <QIcon>
 #include <QWindow>
 
+#include "core/utils/appUiConfig.h"
 #include "version.h"
 
 SystemTrayNotificationHandler::SystemTrayNotificationHandler(QObject* parent) :
@@ -23,7 +24,7 @@ SystemTrayNotificationHandler::SystemTrayNotificationHandler(QObject* parent) :
     , m_systemTrayIcon(parent)
 #endif
 {
-    m_trayActionShow =  m_menu.addAction(QIcon(":/images/tray/application.png"), tr("Show") + " " + APPLICATION_NAME, this, [this](){
+    m_trayActionShow =  m_menu.addAction(QIcon(":/images/tray/application.png"), tr("Show") + " " + APP_DISPLAY_NAME, this, [this](){
         emit raiseRequested();
     });
     m_menu.addSeparator();
@@ -38,7 +39,7 @@ SystemTrayNotificationHandler::SystemTrayNotificationHandler(QObject* parent) :
 
     // Quit action: disconnect VPN first on macOS NE, else quit directly
     m_trayActionQuit = m_menu.addAction(QIcon(":/images/tray/cancel.png"),
-                                       tr("Quit") + " " + APPLICATION_NAME,
+                                       tr("Quit") + " " + APP_DISPLAY_NAME,
                                        this,
                                        [&](){ qApp->quit(); });
 
@@ -72,11 +73,11 @@ void SystemTrayNotificationHandler::setConnectionState(Vpn::ConnectionState stat
 
 void SystemTrayNotificationHandler::onTranslationsUpdated()
 {
-    m_trayActionShow->setText(tr("Show") + " " + APPLICATION_NAME);
+    m_trayActionShow->setText(tr("Show") + " " + APP_DISPLAY_NAME);
     m_trayActionConnect->setText(tr("Connect"));
     m_trayActionDisconnect->setText(tr("Disconnect"));
     m_trayActionVisitWebSite->setText(tr("Visit Website"));
-    m_trayActionQuit->setText(tr("Quit")+ " " + APPLICATION_NAME);
+    m_trayActionQuit->setText(tr("Quit")+ " " + APP_DISPLAY_NAME);
 }
 
 void SystemTrayNotificationHandler::updateWebsiteUrl(const QString &newWebsiteUrl) {
@@ -104,7 +105,7 @@ void SystemTrayNotificationHandler::onTrayActivated(QSystemTrayIcon::ActivationR
 
 void SystemTrayNotificationHandler::setTrayState(Vpn::ConnectionState state)
 {
-    QString resourcesPath = ":/images/tray/%1";
+    QString resourcesPath = APP_TRAY_ICONS_PREFIX "%1";
 
     switch (state) {
     case Vpn::ConnectionState::Disconnected:

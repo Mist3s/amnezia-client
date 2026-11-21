@@ -24,7 +24,7 @@ endif()
 
 # === CPack IFW generator settings ===
 set(CPACK_IFW_PACKAGE_NAME                          AmneziaVPN)
-set(CPACK_IFW_PACKAGE_TITLE                         AmneziaVPN)
+set(CPACK_IFW_PACKAGE_TITLE                         "${CLIENT_DISPLAY_NAME}")
 set(CPACK_IFW_PACKAGE_WIZARD_DEFAULT_WIDTH          600)
 set(CPACK_IFW_PACKAGE_WIZARD_DEFAULT_HEIGHT         380)
 set(CPACK_IFW_PACKAGE_WIZARD_STYLE                  Modern)
@@ -56,13 +56,13 @@ list(APPEND CMAKE_MODULE_PATH           ${CMAKE_SOURCE_DIR}/deploy/data/macos)
 if(LINUX AND NOT ANDROID)
     install(FILES
         ${CMAKE_SOURCE_DIR}/deploy/data/linux/AmneziaVPN.service
-        ${CMAKE_SOURCE_DIR}/deploy/data/linux/AmneziaVPN.png
-        ${CMAKE_SOURCE_DIR}/deploy/data/linux/AmneziaVPN.desktop
         ${CMAKE_SOURCE_DIR}/deploy/data/linux/post_install.sh
         ${CMAKE_SOURCE_DIR}/deploy/data/linux/post_uninstall.sh
         DESTINATION "."
         COMPONENT AmneziaVPN
     )
+    install(FILES ${CLIENT_LINUX_ICON_FILE} DESTINATION "." RENAME AmneziaVPN.png COMPONENT AmneziaVPN)
+    install(FILES ${CLIENT_LINUX_DESKTOP_FILE} DESTINATION "." RENAME AmneziaVPN.desktop COMPONENT AmneziaVPN)
 endif()
 
 if(WIN32)

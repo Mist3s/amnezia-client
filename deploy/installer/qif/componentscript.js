@@ -4,6 +4,11 @@ function appName()
     return installer.value("Name")
 }
 
+function shortcutName()
+{
+    return installer.value("Title")
+}
+
 function serviceName()
 {
     return (appName() + "-service")
@@ -64,12 +69,12 @@ Component.prototype.createOperations = function()
     if (runningOnWindows()) {
 
         component.addOperation("CreateShortcut", "@TargetDir@/" + appExecutableFileName(),
-                               QDesktopServices.storageLocation(QDesktopServices.DesktopLocation) + "/" + appName() + ".lnk",
+                               QDesktopServices.storageLocation(QDesktopServices.DesktopLocation) + "/" + shortcutName() + ".lnk",
                                "workingDirectory=@TargetDir@", "iconPath=@TargetDir@\\" + appExecutableFileName(), "iconId=0");
 
 
         component.addElevatedOperation("CreateShortcut", "@TargetDir@/" + appExecutableFileName(),
-                                       installer.value("AllUsersStartMenuProgramsPath") + "/" + appName() + ".lnk",
+                                       installer.value("AllUsersStartMenuProgramsPath") + "/" + shortcutName() + ".lnk",
                                        "workingDirectory=@TargetDir@", "iconPath=@TargetDir@\\" + appExecutableFileName(), "iconId=0");
 
         if (!vcRuntimeIsInstalled()) {

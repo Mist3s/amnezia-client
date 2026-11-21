@@ -39,11 +39,11 @@ if (-not $process.WaitForExit(600000)) {
 if ($process.ExitCode -ne 0) { throw "the installer exited with code $($process.ExitCode)" }
 if (-not (Test-Path $executable)) { throw "no $executable after the installation" }
 
-$shell = New-Object -ComObject WScript.Shell
+$shell = New-Object -ComObject Shell.Application
 $folders = [Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('CommonDesktopDirectory'),
            [Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('CommonPrograms')
 $shortcuts = Get-ChildItem $folders -Filter '*.lnk' -Recurse -ErrorAction SilentlyContinue |
-    Where-Object { $shell.CreateShortcut($_.FullName).TargetPath -eq $executable }
+    Where-Object { $shell.Namespace($_.DirectoryName).ParseName($_.Name).GetLink.Path -eq $executable }
 $shortcuts | ForEach-Object { $_.FullName } | Set-Content -Encoding utf8 (Join-Path $report 'shortcuts.txt')
 if ($shortcuts.Count -lt 2) { $failures += "expected a desktop and a start menu shortcut, found $($shortcuts.Count)" }
 $shortcuts | Where-Object { $_.BaseName -ne $expectedName } |

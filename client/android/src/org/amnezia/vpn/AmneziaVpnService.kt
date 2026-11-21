@@ -47,6 +47,7 @@ import org.amnezia.vpn.protocol.ProtocolState.DISCONNECTED
 import org.amnezia.vpn.protocol.ProtocolState.DISCONNECTING
 import org.amnezia.vpn.protocol.ProtocolState.RECONNECTING
 import org.amnezia.vpn.protocol.ProtocolState.UNKNOWN
+import org.amnezia.vpn.protocol.Statistics
 import org.amnezia.vpn.protocol.VpnException
 import org.amnezia.vpn.protocol.VpnStartException
 import org.amnezia.vpn.protocol.putStatus
@@ -103,6 +104,7 @@ open class AmneziaVpnService : VpnService() {
     // private var statisticsSendingJob: Job? = null
     private lateinit var networkState: NetworkState
     private lateinit var trafficStats: TrafficStats
+    private lateinit var watchdog: ConnectionWatchdog
     private var controlReceiver: BroadcastReceiver? = null
     private var notificationStateReceiver: BroadcastReceiver? = null
     private var screenOnReceiver: BroadcastReceiver? = null
@@ -156,10 +158,12 @@ open class AmneziaVpnService : VpnService() {
                     }
 
                     Action.CONNECT -> {
+                        watchdog.reset()
                         connect(msg.data.getString(MSG_VPN_CONFIG))
                     }
 
                     Action.DISCONNECT -> {
+                        watchdog.reset()
                         disconnect()
                     }
 
@@ -210,6 +214,9 @@ open class AmneziaVpnService : VpnService() {
         mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         connectionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + connectionExceptionHandler)
         loadServerData()
+        watchdog = ConnectionWatchdog(
+            mainScope, { vpnProto?.protocol?.statistics ?: Statistics.EMPTY_STATISTICS }, { disconnect() }, { connect() }
+        )
         launchProtocolStateHandler()
         networkState = NetworkState(this, ::reconnect)
         trafficStats = TrafficStats()
@@ -218,6 +225,7 @@ open class AmneziaVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val isAlwaysOn = intent != null && intent.action == SERVICE_INTERFACE
+        watchdog.reset()
 
         if (isAlwaysOn) {
             Log.d(TAG, "Start service via Always-on")
@@ -249,7 +257,7 @@ open class AmneziaVpnService : VpnService() {
         if (intent?.action != SERVICE_INTERFACE) {
             if (clientMessengers.isEmpty()) {
                 isServiceBound = false
-                if (isUnknown || isDisconnected) stopService()
+                if ((isUnknown || isDisconnected) && !watchdog.isRetryPending) stopService()
             }
         }
         return true
@@ -267,6 +275,7 @@ open class AmneziaVpnService : VpnService() {
         Log.d(TAG, "onRevoke")
         // Calls to onRevoke() method may not happen on the main thread of the process
         mainScope.launch {
+            watchdog.reset()
             disconnect()
         }
     }
@@ -302,8 +311,16 @@ open class AmneziaVpnService : VpnService() {
             it?.action?.let { action ->
                 Log.v(TAG, "Broadcast request received: $action")
                 when (action) {
-                    ACTION_CONNECT -> connect()
-                    ACTION_DISCONNECT -> disconnect()
+                    ACTION_CONNECT -> {
+                        watchdog.reset()
+                        connect()
+                    }
+
+                    ACTION_DISCONNECT -> {
+                        watchdog.reset()
+                        disconnect()
+                    }
+
                     else -> Log.w(TAG, "Unknown action received: $action")
                 }
             }
@@ -367,6 +384,7 @@ open class AmneziaVpnService : VpnService() {
             // drop first default UNKNOWN state
             protocolState.drop(1).collect { protocolState ->
                 Log.d(TAG, "Protocol state changed: $protocolState")
+                watchdog.onStateChanged(protocolState)
 
                 serviceNotification.updateNotification(serverName, vpnProto?.label, protocolState)
 
@@ -389,7 +407,7 @@ open class AmneziaVpnService : VpnService() {
                         networkState.unbindNetworkListener()
                         stopTrafficStatsUpdateJob()
                         // stopSendingStatistics()
-                        if (!isServiceBound) stopService()
+                        if (!isServiceBound && !watchdog.isRetryPending) stopService()
                     }
 
                     DISCONNECTING -> {

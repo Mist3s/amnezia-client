@@ -1,6 +1,7 @@
 #include "managedConfigPolicy.h"
 
 #include <algorithm>
+#include <iterator>
 
 #include <QHash>
 #include <QJsonArray>
@@ -41,6 +42,8 @@ namespace
 
     constexpr double pollJitterShare = 0.2;
     constexpr qint64 msInHour = 60 * 60 * 1000;
+    constexpr qint64 msInMinute = 60 * 1000;
+    constexpr int retryDelayMinutes[] = { 1, 2, 4, 8, 15, 30 };
 
     QString normalizedBackendUrl(const QString &candidate)
     {
@@ -267,6 +270,12 @@ namespace amnezia::managedConfig
     {
         const double jitter = (qBound(0.0, randomUnit, 1.0) * 2.0 - 1.0) * pollJitterShare;
         return static_cast<qint64>(normalizedPollIntervalHours(intervalHours) * msInHour * (1.0 + jitter));
+    }
+
+    qint64 retryDelayMs(int failedAttempts)
+    {
+        const int lastIndex = static_cast<int>(std::size(retryDelayMinutes)) - 1;
+        return retryDelayMinutes[qBound(0, failedAttempts - 1, lastIndex)] * msInMinute;
     }
 
 } // namespace amnezia::managedConfig

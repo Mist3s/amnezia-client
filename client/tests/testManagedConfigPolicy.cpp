@@ -343,6 +343,17 @@ private slots:
         QCOMPARE(nextPollDelayMs(10, 1.0), 12 * hourMs);
         QCOMPARE(nextPollDelayMs(10, 7.0), 12 * hourMs);
     }
+
+    void retriesWaitLongerAndLongerUpToHalfAnHour()
+    {
+        const qint64 minuteMs = 60 * 1000;
+        QCOMPARE(retryDelayMs(1), 1 * minuteMs);
+        QCOMPARE(retryDelayMs(2), 2 * minuteMs);
+        QCOMPARE(retryDelayMs(5), 15 * minuteMs);
+        QCOMPARE(retryDelayMs(6), 30 * minuteMs);
+        QCOMPARE(retryDelayMs(40), 30 * minuteMs);
+        QCOMPARE(retryDelayMs(0), 1 * minuteMs);
+    }
 };
 
 QTEST_MAIN(TestManagedConfigPolicy)

@@ -64,6 +64,13 @@ ManagedConfigController::ManagedConfigController(SecureServersRepository *server
     m_tunnelCheckTimer.setSingleShot(true);
     connect(&m_tunnelCheckTimer, &QTimer::timeout, this, &ManagedConfigController::checkTunnel);
 
+    m_connectTimeoutTimer.setSingleShot(true);
+    m_connectTimeoutTimer.setInterval(managedConfig::connectTimeoutMs);
+    connect(&m_connectTimeoutTimer, &QTimer::timeout, this, &ManagedConfigController::giveUpConnecting);
+
+    m_retryTimer.setSingleShot(true);
+    connect(&m_retryTimer, &QTimer::timeout, this, &ManagedConfigController::retryConnecting);
+
     connect(m_connectionController, &ConnectionController::openConnectionRequested, this,
             [this](const QString &serverId) { onConnectionRequested(serverId); });
     connect(m_connectionController, &ConnectionController::connectionStateChanged, this,
@@ -157,6 +164,9 @@ void ManagedConfigController::forget(const QString &serverId)
 {
     const QString deviceKey = m_managedConfigRepository->settings(serverId).deviceKey;
     abandonRefresh(serverId);
+    if (serverId == m_connectionServerId) {
+        m_retryTimer.stop();
+    }
     m_managedConfigRepository->remove(serverId);
 
     for (const QString &memberId : serverGroup(deviceKey)) {
@@ -572,6 +582,11 @@ void ManagedConfigController::continuePlan(const QString &serverId, RefreshResul
             }
             return;
         }
+        case Plan::ReconnectAfterRetryRefresh: {
+            m_plan = Plan::Idle;
+            reopenConnection(serverId);
+            return;
+        }
         default: break;
         }
     }
@@ -610,6 +625,7 @@ void ManagedConfigController::pollIfDue()
 
 void ManagedConfigController::onConnectionRequested(const QString &serverId)
 {
+    m_retryTimer.stop();
     m_connectionServerId = serverId;
     m_connectionRevision = m_managedConfigRepository->settings(serverId).revision;
 }
@@ -621,12 +637,23 @@ void ManagedConfigController::onConnectionStateChanged(Vpn::ConnectionState stat
     }
     m_connectionState = state;
     m_tunnelCheckTimer.stop();
+    m_connectTimeoutTimer.stop();
 
     switch (state) {
+    case Vpn::ConnectionState::Connecting:
+    case Vpn::ConnectionState::Reconnecting: {
+#if !defined(Q_OS_ANDROID)
+        if (isManaged(m_connectionServerId)) {
+            m_connectTimeoutTimer.start();
+        }
+#endif
+        return;
+    }
     case Vpn::ConnectionState::Connected: {
         if (m_connectionServerId.isEmpty()) {
             onConnectionRequested(m_serversRepository->defaultServerId());
         }
+        m_failedConnects = 0;
         if (!isManaged(m_connectionServerId)) {
             return;
         }
@@ -645,8 +672,13 @@ void ManagedConfigController::onConnectionStateChanged(Vpn::ConnectionState stat
             reopenConnection(serverId);
         } else if (m_plan == Plan::RecoverAfterClose) {
             refreshToReconnect(Plan::ReconnectAfterRecoveryRefresh, serverId);
+        } else if (m_plan == Plan::GiveUpAfterClose) {
+            m_retryTimer.start(managedConfig::retryDelayMs(m_failedConnects));
+            refreshToReconnect(Plan::ReconnectAfterErrorRefresh, serverId);
         } else if (m_plan == Plan::Idle) {
             m_connectionServerId.clear();
+            m_retryTimer.stop();
+            m_failedConnects = 0;
         }
         return;
     }
@@ -740,6 +772,30 @@ void ManagedConfigController::probeTunnel(const QStringList &probeUrls)
             probeTunnel(probeUrls.mid(1));
         }
     });
+}
+
+void ManagedConfigController::giveUpConnecting()
+{
+    const bool isConnecting = m_connectionState == Vpn::ConnectionState::Connecting
+            || m_connectionState == Vpn::ConnectionState::Reconnecting;
+    if (!isConnecting || m_plan != Plan::Idle || !isManaged(m_connectionServerId)) {
+        return;
+    }
+
+    ++m_failedConnects;
+    logger.warning() << "The VPN server does not answer, using the plain internet until retry" << m_failedConnects;
+    m_plan = Plan::GiveUpAfterClose;
+    m_planServerId = m_connectionServerId;
+    emit serverNotResponding();
+    m_connectionController->closeConnection();
+}
+
+void ManagedConfigController::retryConnecting()
+{
+    if (m_plan != Plan::Idle || m_connectionState != Vpn::ConnectionState::Disconnected) {
+        return;
+    }
+    refreshToReconnect(Plan::ReconnectAfterRetryRefresh, m_planServerId);
 }
 
 void ManagedConfigController::onTunnelProbed(bool isAlive)

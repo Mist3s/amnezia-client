@@ -34,6 +34,7 @@ signals:
     void manualRefreshFinished(const QString &message);
     void setupStarted();
     void setupFinished(bool isSetUp, const QString &message);
+    void serverNotResponding(const QString &message);
 
 private:
     QString resultText(ManagedConfigController::RefreshResult result) const;

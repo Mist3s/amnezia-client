@@ -15,6 +15,7 @@ namespace amnezia::managedConfig
     constexpr int defaultPollIntervalHours = 6;
     constexpr int minPollIntervalHours = 1;
     constexpr int maxPollIntervalHours = 168;
+    constexpr int connectTimeoutMs = 30 * 1000;
 
     enum class ReplyAction {
         Apply,
@@ -96,6 +97,7 @@ namespace amnezia::managedConfig
 
     int normalizedPollIntervalHours(int requestedHours);
     qint64 nextPollDelayMs(int intervalHours, double randomUnit);
+    qint64 retryDelayMs(int failedAttempts);
 
 } // namespace amnezia::managedConfig
 

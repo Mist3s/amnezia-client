@@ -59,6 +59,7 @@ signals:
     void readyToConnect();
     void setupStarted();
     void setupFinished(const QString &serverId, ManagedConfigController::RefreshResult result);
+    void serverNotResponding();
 
 private:
     enum class Plan {
@@ -67,7 +68,9 @@ private:
         ReconnectAfterClose,
         RecoverAfterClose,
         ReconnectAfterRecoveryRefresh,
-        ReconnectAfterErrorRefresh
+        ReconnectAfterErrorRefresh,
+        GiveUpAfterClose,
+        ReconnectAfterRetryRefresh
     };
 
     struct ListOutcome
@@ -111,6 +114,9 @@ private:
     void probeTunnel(const QStringList &probeUrls);
     void onTunnelProbed(bool isAlive);
 
+    void giveUpConnecting();
+    void retryConnecting();
+
     SecureServersRepository *m_serversRepository;
     ManagedConfigRepository *m_managedConfigRepository;
     ImportController *m_importController;
@@ -132,6 +138,10 @@ private:
     QTimer m_tunnelCheckTimer;
     int m_failedTunnelChecks = 0;
     int m_tunnelCheckBackoff = 1;
+
+    QTimer m_connectTimeoutTimer;
+    QTimer m_retryTimer;
+    int m_failedConnects = 0;
 };
 
 #endif // MANAGEDCONFIGCONTROLLER_H

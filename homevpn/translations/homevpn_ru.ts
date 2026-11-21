@@ -11,6 +11,10 @@
 <context>
     <name>ManagedConfigUiController</name>
     <message>
+        <source>The VPN server does not answer. The internet works without VPN for now, the app will connect again by itself</source>
+        <translation>VPN-сервер не отвечает. Пока интернет работает без VPN, приложение подключится снова само</translation>
+    </message>
+    <message>
         <source>Auto-update is off</source>
         <translation>Автообновление выключено</translation>
     </message>

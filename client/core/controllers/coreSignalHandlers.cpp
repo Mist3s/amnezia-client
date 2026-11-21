@@ -583,6 +583,8 @@ void CoreSignalHandlers::initManagedConfigHandler()
             m_coreController->m_managedConfigController, &ManagedConfigController::forget);
     connect(m_coreController->m_importController, &ImportUiController::managedSetupRequested, m_coreController,
             &CoreController::applyManagedSetup);
+    connect(m_coreController->m_managedConfigUiController, &ManagedConfigUiController::serverNotResponding,
+            m_coreController->m_pageController, &PageController::showNotificationMessage);
 
     m_coreController->m_managedConfigController->start();
 }

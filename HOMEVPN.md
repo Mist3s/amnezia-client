@@ -20,6 +20,9 @@
   её первый элемент (на главной — кнопка подключения).
 - **Плитка быстрых настроек Android** (там же, где Wi-Fi и Bluetooth) подписана названием приложения,
   а не именем сервера; значок — наш.
+- **Название и значок на Linux и Windows.** Ярлык, заголовок окна, меню и значок в трее — «ЧихНет».
+  Внутренние имена (программа `AmneziaVPN`, служба, папка настроек) оставлены как в оригинале,
+  чтобы уже установленное приложение не потеряло настройки.
 
 Всё остальное работает как в оригинале. Пока адрес бэкенда не задан, приложение ведёт себя как AmneziaVPN.
 
@@ -43,6 +46,8 @@
 | Сборка | `homevpn/android-apk.sh`, `homevpn/version.sh`, `homevpn/conan-pin-zlib.profile` |
 | Сборка и релиз на GitHub | `.github/workflows/homevpn-release.yml`, `homevpn/release-manifest.py` |
 | Список изменений сборок | `homevpn/changelog.json`, `homevpn/changelog.py` |
+| Название и значки для Linux и Windows | `homevpn/desktop/` (подключается ключом `cmake -C homevpn/desktop/brand.cmake`), `client/cmake/branding/desktop.cmake` |
+| Проверка установщика Windows на машине GitHub | `.github/workflows/homevpn-windows-check.yml`, `homevpn/desktop/check-windows.ps1` |
 
 Проверка сертификата — штатный TLS Qt, sha256 — `QCryptographicHash`, установка APK — системный установщик Android.
 Своей криптографии в форке нет.
@@ -151,7 +156,7 @@ homevpn/android-apk.sh 28 armeabi-v7a 2   # приставки, Android 9–10
 ### Linux
 
 ```sh
-EXTRA_CMAKE_ARGS="-DAMNEZIAVPN_VERSION=5.1.1.1102 -DCONAN_HOST_PROFILE=default;auto-cmake;$PWD/homevpn/conan-pin-zlib.profile" \
+EXTRA_CMAKE_ARGS="-C $PWD/homevpn/desktop/brand.cmake -DAMNEZIAVPN_VERSION=5.1.1.1102 -DCONAN_HOST_PROFILE=default;auto-cmake;$PWD/homevpn/conan-pin-zlib.profile" \
     deploy/build.sh --generator Ninja --installer all
 ```
 
@@ -166,7 +171,16 @@ EXTRA_CMAKE_ARGS="-DAMNEZIAVPN_VERSION=5.1.1.1102 -DCONAN_HOST_PROFILE=default;a
 
 Собирается только на GitHub (см. ниже). Установщик: `AmneziaVPN_<версия>_windows_x64.exe`.
 
-На ПК сборка не переименована: она называется AmneziaVPN и ставится **вместо** официального клиента.
+На ПК человек видит «ЧихНет» и наш значок (ярлык, окно, трей) — это задаёт `homevpn/desktop/brand.cmake`.
+Внутри сборка по-прежнему зовётся AmneziaVPN (программа, служба, папка установки и настроек)
+и ставится **вместо** официального клиента.
+
+Проверить установщик Windows без своей машины: сценарий **«HomeVPN Windows check»** ставит выпущенную версию
+на машине GitHub, сверяет названия ярлыков и окна и прикладывает снимки экрана:
+
+```sh
+gh workflow run homevpn-windows-check.yml --ref homevpn -f version=5.1.1.1109
+```
 
 ### На GitHub: все сборки сразу
 

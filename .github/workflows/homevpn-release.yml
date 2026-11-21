@@ -212,7 +212,7 @@ jobs:
         QT_INSTALL_DIR: ${{ runner.temp }}
         AMNEZIA_BUILD_TESTS: ON
       run: |
-        export EXTRA_CMAKE_ARGS="-DAMNEZIAVPN_VERSION=$HOMEVPN_VERSION -DCONAN_HOST_PROFILE=default;auto-cmake;$GITHUB_WORKSPACE/homevpn/conan-pin-zlib.profile"
+        export EXTRA_CMAKE_ARGS="-C $GITHUB_WORKSPACE/homevpn/desktop/brand.cmake -DAMNEZIAVPN_VERSION=$HOMEVPN_VERSION -DCONAN_HOST_PROFILE=default;auto-cmake;$GITHUB_WORKSPACE/homevpn/conan-pin-zlib.profile"
         deploy/build.sh --generator Ninja --installer all
 
     - name: 'Run HomeVPN tests'
@@ -282,7 +282,7 @@ jobs:
       env:
         QT_ROOT: ${{ runner.temp }}\Qt
       run: |
-        cmake -S . -B deploy\build -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=%QT_ROOT%\%QT_VERSION%\msvc2022_64" "-DCMAKE_VS_GLOBALS=UseMultiToolTask=true;EnforceProcessCountAcrossBuilds=true" -DAMNEZIAVPN_VERSION=%HOMEVPN_VERSION% "-DCONAN_HOST_PROFILE=default;auto-cmake;%GITHUB_WORKSPACE%\homevpn\conan-pin-zlib.profile" || exit /b 1
+        cmake -S . -B deploy\build -C homevpn\desktop\brand.cmake -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=%QT_ROOT%\%QT_VERSION%\msvc2022_64" "-DCMAKE_VS_GLOBALS=UseMultiToolTask=true;EnforceProcessCountAcrossBuilds=true" -DAMNEZIAVPN_VERSION=%HOMEVPN_VERSION% "-DCONAN_HOST_PROFILE=default;auto-cmake;%GITHUB_WORKSPACE%\homevpn\conan-pin-zlib.profile" || exit /b 1
         cmake --build deploy\build --config Release -- /m || exit /b 1
         cd deploy\build && cpack -G IFW -D "QTIFWDIR=%QT_ROOT%\Tools\QtInstallerFramework\%QIF_VERSION%" || exit /b 1
 

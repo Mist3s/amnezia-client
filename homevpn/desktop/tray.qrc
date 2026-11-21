@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/homevpn">
+        <file>tray/active.png</file>
+        <file>tray/default.png</file>
+        <file>tray/error.png</file>
+    </qresource>
+</RCC>

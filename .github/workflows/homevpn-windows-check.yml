@@ -1,0 +1,43 @@
+name: 'HomeVPN Windows check'
+run-name: 'HomeVPN Windows check ${{ inputs.version }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version of a published HomeVPN release, for example 5.1.1.1109'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  Check:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: 'Get sources'
+      uses: actions/checkout@v4
+      with:
+        sparse-checkout: |
+          homevpn/desktop/brand.cmake
+          homevpn/desktop/check-windows.ps1
+        sparse-checkout-cone-mode: false
+
+    - name: 'Install the release and look at it'
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ inputs.version }}
+      run: ./homevpn/desktop/check-windows.ps1 -Version $env:VERSION -Repository $env:GITHUB_REPOSITORY -Report check
+
+    - name: 'Upload the report'
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: homevpn-windows-check
+        path: check/
+        if-no-files-found: warn
+        retention-days: 14

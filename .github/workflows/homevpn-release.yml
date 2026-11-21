@@ -151,6 +151,12 @@ jobs:
         JOBS: 4
       run: homevpn/android-apk.sh "${{ matrix.min_sdk }}" "${{ matrix.abi }}" "$BUILD_NUMBER"
 
+    - name: 'Check that the build used the HomeVPN icons'
+      run: |
+        overlay=homevpn/android-res
+        res="deploy/build-homevpn/android-${{ matrix.abi }}-api${{ matrix.min_sdk }}/client/android-package-source/res"
+        (cd "$overlay" && find . -type f) | while read -r file; do cmp "$overlay/$file" "$res/$file"; done
+
     - name: 'Upload APK'
       uses: actions/upload-artifact@v7
       with:

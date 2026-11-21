@@ -2,6 +2,7 @@
 #define MANAGEDCONFIGPOLICY_H
 
 #include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
@@ -20,12 +21,45 @@ namespace amnezia::managedConfig
         TryNextBackend
     };
 
+    struct RemoteServer
+    {
+        QString id;
+        QString name;
+        QString revision;
+        QString config;
+    };
+
     struct ReplyDecision
     {
         ReplyAction action = ReplyAction::TryNextBackend;
         QString revision;
-        QString config;
+        QString mainId;
+        QList<RemoteServer> servers;
+        bool isServerList = false;
         int pollIntervalHours = 0;
+    };
+
+    struct LocalServer
+    {
+        QString serverId;
+        QString remoteId;
+        QString revision;
+    };
+
+    struct KeptServer
+    {
+        QString serverId;
+        RemoteServer remote;
+        bool isConfigChanged = false;
+    };
+
+    struct ServerListChanges
+    {
+        QList<KeptServer> kept;
+        QList<RemoteServer> added;
+        QStringList removedServerIds;
+        QString mainId;
+        bool isMainChanged = false;
     };
 
     struct SetupRequest
@@ -45,6 +79,8 @@ namespace amnezia::managedConfig
     QUrl configEndpoint(const QString &backendUrl);
 
     ReplyDecision decideOnReply(int httpStatus, const QByteArray &body, const QString &currentRevision);
+    ServerListChanges planServerListChanges(const QList<LocalServer> &localServers, const QString &localMainId,
+                                            const ReplyDecision &decision);
 
     int normalizedPollIntervalHours(int requestedHours);
     qint64 nextPollDelayMs(int intervalHours, double randomUnit);

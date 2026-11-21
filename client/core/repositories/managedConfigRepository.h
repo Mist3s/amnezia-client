@@ -12,6 +12,10 @@ struct ManagedConfigSettings
     QStringList backendUrls;
     QString deviceKey;
     QString revision;
+    QString listRevision;
+    QString mainId;
+    QString remoteId;
+    QString remoteName;
     QString lastWorkingUrl;
     int pollIntervalHours = 0;
     qint64 lastCheckedAt = 0;

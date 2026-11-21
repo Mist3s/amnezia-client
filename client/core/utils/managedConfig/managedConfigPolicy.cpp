@@ -2,9 +2,11 @@
 
 #include <algorithm>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QUrlQuery>
 
 namespace
 {
@@ -14,6 +16,12 @@ namespace
     constexpr QLatin1String replyRevisionKey("revision");
     constexpr QLatin1String replyConfigKey("config");
     constexpr QLatin1String replyPollIntervalHoursKey("poll_interval_hours");
+    constexpr QLatin1String replyServerNameKey("server_name");
+    constexpr QLatin1String replyServersKey("servers");
+    constexpr QLatin1String replyMainKey("main");
+    constexpr QLatin1String replyIdKey("id");
+    constexpr QLatin1String replyNameKey("name");
+    constexpr QLatin1String serverListQuery("servers=1");
 
     constexpr QLatin1String setupBackendKey("backend");
     constexpr QLatin1String setupDeviceKeyKey("key");
@@ -42,6 +50,38 @@ namespace
             normalized.chop(1);
         }
         return normalized;
+    }
+
+    amnezia::managedConfig::RemoteServer remoteServerFrom(const QJsonObject &entry, const QString &name)
+    {
+        amnezia::managedConfig::RemoteServer server;
+        server.id = entry.value(replyIdKey).toString();
+        server.name = name.simplified();
+        server.revision = entry.value(replyRevisionKey).toString();
+        server.config = entry.value(replyConfigKey).toString();
+        return server;
+    }
+
+    bool isUsable(const amnezia::managedConfig::RemoteServer &server)
+    {
+        return !server.revision.isEmpty() && !server.config.trimmed().isEmpty();
+    }
+
+    QList<amnezia::managedConfig::RemoteServer> remoteServersFrom(const QJsonArray &entries)
+    {
+        QList<amnezia::managedConfig::RemoteServer> servers;
+        QStringList ids;
+        for (const QJsonValue &value : entries) {
+            const QJsonObject entry = value.toObject();
+            const amnezia::managedConfig::RemoteServer server =
+                    remoteServerFrom(entry, entry.value(replyNameKey).toString());
+            if (server.id.isEmpty() || ids.contains(server.id) || !isUsable(server)) {
+                return {};
+            }
+            ids.append(server.id);
+            servers.append(server);
+        }
+        return servers;
     }
 }
 
@@ -97,7 +137,9 @@ namespace amnezia::managedConfig
 
     QUrl configEndpoint(const QString &backendUrl)
     {
-        return QUrl(backendUrl + configPath);
+        QUrl endpoint(backendUrl + configPath);
+        endpoint.setQuery(QUrlQuery(serverListQuery));
+        return endpoint;
     }
 
     ReplyDecision decideOnReply(int httpStatus, const QByteArray &body, const QString &currentRevision)
@@ -118,15 +160,69 @@ namespace amnezia::managedConfig
 
         const QJsonObject reply = QJsonDocument::fromJson(body).object();
         decision.revision = reply.value(replyRevisionKey).toString();
-        decision.config = reply.value(replyConfigKey).toString();
         decision.pollIntervalHours = reply.value(replyPollIntervalHoursKey).toInt();
+        decision.isServerList = reply.contains(replyServersKey);
+        if (decision.isServerList) {
+            decision.mainId = reply.value(replyMainKey).toString();
+            decision.servers = remoteServersFrom(reply.value(replyServersKey).toArray());
+        } else {
+            const RemoteServer server = remoteServerFrom(reply, reply.value(replyServerNameKey).toString());
+            if (isUsable(server)) {
+                decision.servers.append(server);
+            }
+        }
 
-        if (decision.revision.isEmpty() || decision.config.trimmed().isEmpty()) {
+        const bool hasMain =
+                std::any_of(decision.servers.cbegin(), decision.servers.cend(),
+                            [&decision](const RemoteServer &server) { return server.id == decision.mainId; });
+        if (decision.revision.isEmpty() || !hasMain) {
             return decision;
         }
 
         decision.action = decision.revision == currentRevision ? ReplyAction::KeepCurrent : ReplyAction::Apply;
         return decision;
+    }
+
+    ServerListChanges planServerListChanges(const QList<LocalServer> &localServers, const QString &localMainId,
+                                            const ReplyDecision &decision)
+    {
+        ServerListChanges changes;
+        changes.mainId = decision.isServerList ? decision.mainId : localMainId;
+        changes.isMainChanged = decision.isServerList && !localMainId.isEmpty() && localMainId != decision.mainId;
+
+        QStringList keptServerIds;
+        const auto localServerFor = [&](const QString &remoteId) {
+            const auto byRemoteId =
+                    std::find_if(localServers.cbegin(), localServers.cend(), [&](const LocalServer &server) {
+                        return server.remoteId == remoteId && !keptServerIds.contains(server.serverId);
+                    });
+            if (byRemoteId != localServers.cend() || remoteId != changes.mainId) {
+                return byRemoteId;
+            }
+            return std::find_if(localServers.cbegin(), localServers.cend(), [&](const LocalServer &server) {
+                return server.remoteId.isEmpty() && !keptServerIds.contains(server.serverId);
+            });
+        };
+
+        for (RemoteServer remote : decision.servers) {
+            if (!decision.isServerList) {
+                remote.id = changes.mainId;
+            }
+            const auto local = localServerFor(remote.id);
+            if (local == localServers.cend()) {
+                changes.added.append(remote);
+                continue;
+            }
+            keptServerIds.append(local->serverId);
+            changes.kept.append({ local->serverId, remote, local->revision != remote.revision });
+        }
+
+        for (const LocalServer &local : localServers) {
+            if (decision.isServerList && !local.remoteId.isEmpty() && !keptServerIds.contains(local.serverId)) {
+                changes.removedServerIds.append(local.serverId);
+            }
+        }
+        return changes;
     }
 
     int normalizedPollIntervalHours(int requestedHours)

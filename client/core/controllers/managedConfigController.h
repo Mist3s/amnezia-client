@@ -12,6 +12,7 @@
 #include "core/protocols/vpnProtocol.h"
 #include "core/repositories/managedConfigRepository.h"
 #include "core/repositories/secureServersRepository.h"
+#include "core/utils/managedConfig/managedConfigPolicy.h"
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -67,7 +68,15 @@ private:
         ReconnectAfterErrorRefresh
     };
 
+    struct ListOutcome
+    {
+        RefreshResult result = RefreshResult::InvalidConfig;
+        QString mainServerId;
+    };
+
     QNetworkAccessManager *networkManager() const;
+    QStringList serverGroup(const QString &deviceKey) const;
+    QString mainServerOf(const QStringList &group) const;
 
     QNetworkReply *requestConfig(const QString &backendUrl, const QString &deviceKey, const QString &revision) const;
     QJsonObject nativeConfigFrom(const QString &config) const;
@@ -78,7 +87,10 @@ private:
 
     void requestNextBackend(const QString &serverId);
     void handleBackendReply(const QString &serverId, const QString &backendUrl, QNetworkReply *reply);
-    bool applyConfig(const QString &serverId, const QString &config);
+    ListOutcome applyServerList(const ManagedConfigSettings &source, const QString &backendUrl,
+                                const amnezia::managedConfig::ReplyDecision &decision);
+    bool updateServer(const QString &serverId, const QJsonObject &config, const QString &name,
+                      const QString &previousName);
     void finishRefresh(const QString &serverId, RefreshResult result);
     void abandonRefresh(const QString &serverId);
     void continuePlan(const QString &serverId, RefreshResult result);
@@ -91,6 +103,7 @@ private:
     void reconnectWithFreshConfig();
     void refreshToReconnect(Plan plan, const QString &serverId);
     void reopenConnection(const QString &serverId);
+    QString reconnectTarget(const QString &serverId) const;
 
     void checkTunnel();
     void probeTunnel(const QStringList &probeUrls);

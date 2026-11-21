@@ -7,6 +7,10 @@ namespace
     constexpr QLatin1String backendUrlsKey("backendUrls");
     constexpr QLatin1String deviceKeyKey("deviceKey");
     constexpr QLatin1String revisionKey("revision");
+    constexpr QLatin1String listRevisionKey("listRevision");
+    constexpr QLatin1String mainIdKey("mainId");
+    constexpr QLatin1String remoteIdKey("remoteId");
+    constexpr QLatin1String remoteNameKey("remoteName");
     constexpr QLatin1String lastWorkingUrlKey("lastWorkingUrl");
     constexpr QLatin1String pollIntervalHoursKey("pollIntervalHours");
     constexpr QLatin1String lastCheckedAtKey("lastCheckedAt");
@@ -31,6 +35,10 @@ ManagedConfigSettings ManagedConfigRepository::settings(const QString &serverId)
     settings.backendUrls = stored.value(backendUrlsKey).toStringList();
     settings.deviceKey = stored.value(deviceKeyKey).toString();
     settings.revision = stored.value(revisionKey).toString();
+    settings.listRevision = stored.value(listRevisionKey).toString();
+    settings.mainId = stored.value(mainIdKey).toString();
+    settings.remoteId = stored.value(remoteIdKey).toString();
+    settings.remoteName = stored.value(remoteNameKey).toString();
     settings.lastWorkingUrl = stored.value(lastWorkingUrlKey).toString();
     settings.pollIntervalHours = stored.value(pollIntervalHoursKey).toInt();
     settings.lastCheckedAt = stored.value(lastCheckedAtKey).toLongLong();
@@ -48,6 +56,10 @@ void ManagedConfigRepository::setSettings(const QString &serverId, const Managed
     stored.insert(backendUrlsKey, settings.backendUrls);
     stored.insert(deviceKeyKey, settings.deviceKey);
     stored.insert(revisionKey, settings.revision);
+    stored.insert(listRevisionKey, settings.listRevision);
+    stored.insert(mainIdKey, settings.mainId);
+    stored.insert(remoteIdKey, settings.remoteId);
+    stored.insert(remoteNameKey, settings.remoteName);
     stored.insert(lastWorkingUrlKey, settings.lastWorkingUrl);
     stored.insert(pollIntervalHoursKey, settings.pollIntervalHours);
     stored.insert(lastCheckedAtKey, settings.lastCheckedAt);

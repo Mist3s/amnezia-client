@@ -1,3 +1,4 @@
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTest>
@@ -17,6 +18,34 @@ private:
                                            { "config", config },
                                            { "poll_interval_hours", pollIntervalHours } })
                 .toJson();
+    }
+
+    static QJsonObject listEntry(const QString &id, const QString &revision, const QString &name = QString())
+    {
+        return QJsonObject { { "id", id }, { "name", name }, { "revision", revision }, { "config", "[Interface]\n" } };
+    }
+
+    static QByteArray listBody(const QString &revision, const QString &mainId, const QJsonArray &servers)
+    {
+        return QJsonDocument(QJsonObject { { "revision", revision },
+                                           { "main", mainId },
+                                           { "servers", servers },
+                                           { "poll_interval_hours", 6 } })
+                .toJson();
+    }
+
+    static ReplyDecision listDecision(const QString &mainId, const QJsonArray &servers)
+    {
+        return decideOnReply(200, listBody("list2", mainId, servers), "list1");
+    }
+
+    static QStringList remoteIds(const QList<RemoteServer> &servers)
+    {
+        QStringList ids;
+        for (const RemoteServer &server : servers) {
+            ids.append(server.id);
+        }
+        return ids;
     }
 
     static QByteArray setupFile(const QJsonObject &content)
@@ -121,7 +150,8 @@ private slots:
 
     void configEndpointKeepsBackendPath()
     {
-        QCOMPARE(configEndpoint("https://example.org/base").toString(), QString("https://example.org/base/v1/config"));
+        QCOMPARE(configEndpoint("https://example.org/base").toString(),
+                 QString("https://example.org/base/v1/config?servers=1"));
     }
 
     void newRevisionIsApplied()
@@ -129,8 +159,116 @@ private slots:
         const ReplyDecision decision = decideOnReply(200, replyBody("rev2", "[Interface]\n", 3), "rev1");
         QCOMPARE(decision.action, ReplyAction::Apply);
         QCOMPARE(decision.revision, QString("rev2"));
-        QCOMPARE(decision.config, QString("[Interface]\n"));
+        QCOMPARE(decision.servers.size(), 1);
+        QCOMPARE(decision.servers.first().config, QString("[Interface]\n"));
+        QCOMPARE(decision.servers.first().revision, QString("rev2"));
         QCOMPARE(decision.pollIntervalHours, 3);
+        QVERIFY(!decision.isServerList);
+    }
+
+    void serverListIsReadWithItsMainServer()
+    {
+        const ReplyDecision decision =
+                listDecision("fi", { listEntry("fi", "a", " Finland  home "), listEntry("nl", "b") });
+        QCOMPARE(decision.action, ReplyAction::Apply);
+        QVERIFY(decision.isServerList);
+        QCOMPARE(decision.mainId, QString("fi"));
+        QCOMPARE(remoteIds(decision.servers), QStringList({ "fi", "nl" }));
+        QCOMPARE(decision.servers.first().name, QString("Finland home"));
+        QCOMPARE(decideOnReply(200, listBody("list1", "fi", { listEntry("fi", "a") }), "list1").action,
+                 ReplyAction::KeepCurrent);
+    }
+
+    void brokenServerListMovesToNextBackend_data()
+    {
+        QTest::addColumn<QString>("mainId");
+        QTest::addColumn<QJsonArray>("servers");
+
+        QTest::newRow("empty list") << "fi" << QJsonArray();
+        QTest::newRow("main is not in the list") << "se" << QJsonArray { listEntry("fi", "a") };
+        QTest::newRow("no main") << "" << QJsonArray { listEntry("fi", "a") };
+        QTest::newRow("entry without id") << "fi" << QJsonArray { listEntry("fi", "a"), listEntry("", "b") };
+        QTest::newRow("entry without revision") << "fi" << QJsonArray { listEntry("fi", "a"), listEntry("nl", "") };
+        QTest::newRow("repeated id") << "fi" << QJsonArray { listEntry("fi", "a"), listEntry("fi", "b") };
+    }
+
+    void brokenServerListMovesToNextBackend()
+    {
+        QFETCH(QString, mainId);
+        QFETCH(QJsonArray, servers);
+
+        QCOMPARE(listDecision(mainId, servers).action, ReplyAction::TryNextBackend);
+    }
+
+    void firstListAddsEveryServer()
+    {
+        const ServerListChanges changes =
+                planServerListChanges({}, QString(), listDecision("fi", { listEntry("fi", "a"), listEntry("nl", "b") }));
+        QCOMPARE(remoteIds(changes.added), QStringList({ "fi", "nl" }));
+        QVERIFY(changes.kept.isEmpty() && changes.removedServerIds.isEmpty() && !changes.isMainChanged);
+        QCOMPARE(changes.mainId, QString("fi"));
+    }
+
+    void serverFromBeforeTheListBecomesItsMainServer()
+    {
+        const ServerListChanges changes =
+                planServerListChanges({ { "local1", QString(), "a" } }, QString(),
+                                      listDecision("fi", { listEntry("fi", "a"), listEntry("nl", "b") }));
+        QCOMPARE(changes.kept.size(), 1);
+        QCOMPARE(changes.kept.first().serverId, QString("local1"));
+        QCOMPARE(changes.kept.first().remote.id, QString("fi"));
+        QVERIFY(!changes.kept.first().isConfigChanged);
+        QCOMPARE(remoteIds(changes.added), QStringList({ "nl" }));
+        QVERIFY(changes.removedServerIds.isEmpty() && !changes.isMainChanged);
+    }
+
+    void listChangesAreSplitIntoKeptAddedAndRemoved()
+    {
+        const QList<LocalServer> local = { { "local1", "fi", "a" }, { "local2", "nl", "b" }, { "local3", "se", "c" } };
+        const ServerListChanges changes = planServerListChanges(
+                local, "fi", listDecision("fi", { listEntry("fi", "a"), listEntry("nl", "b2"), listEntry("de", "d") }));
+        QCOMPARE(changes.kept.size(), 2);
+        QVERIFY(!changes.kept.at(0).isConfigChanged);
+        QCOMPARE(changes.kept.at(1).serverId, QString("local2"));
+        QVERIFY(changes.kept.at(1).isConfigChanged);
+        QCOMPARE(remoteIds(changes.added), QStringList({ "de" }));
+        QCOMPARE(changes.removedServerIds, QStringList({ "local3" }));
+        QVERIFY(!changes.isMainChanged);
+    }
+
+    void newMainServerIsNoticed()
+    {
+        const QList<LocalServer> local = { { "local1", "fi", "a" }, { "local2", "nl", "b" } };
+        const ServerListChanges changes =
+                planServerListChanges(local, "fi", listDecision("nl", { listEntry("nl", "b"), listEntry("fi", "a") }));
+        QVERIFY(changes.isMainChanged);
+        QCOMPARE(changes.mainId, QString("nl"));
+        QVERIFY(changes.added.isEmpty() && changes.removedServerIds.isEmpty());
+    }
+
+    void serverBoundByHandIsNeverRemoved()
+    {
+        const QList<LocalServer> local = { { "local1", "fi", "a" }, { "byHand", QString(), "x" } };
+        const ServerListChanges changes =
+                planServerListChanges(local, "fi", listDecision("fi", { listEntry("fi", "a") }));
+        QCOMPARE(changes.kept.size(), 1);
+        QVERIFY(changes.removedServerIds.isEmpty());
+    }
+
+    void singleConfigReplyUpdatesTheMainServerOnly()
+    {
+        const QList<LocalServer> local = { { "local1", "fi", "a" }, { "local2", "nl", "b" } };
+        const ServerListChanges changes =
+                planServerListChanges(local, "fi", decideOnReply(200, replyBody("a2", "[Interface]\n"), "list1"));
+        QCOMPARE(changes.kept.size(), 1);
+        QCOMPARE(changes.kept.first().serverId, QString("local1"));
+        QVERIFY(changes.kept.first().isConfigChanged);
+        QVERIFY(changes.added.isEmpty() && changes.removedServerIds.isEmpty() && !changes.isMainChanged);
+
+        const ServerListChanges legacy = planServerListChanges({ { "old", QString(), "a" } }, QString(),
+                                                               decideOnReply(200, replyBody("a", "x"), "b"));
+        QCOMPARE(legacy.kept.size(), 1);
+        QVERIFY(!legacy.kept.first().isConfigChanged && legacy.added.isEmpty());
     }
 
     void firstConfigIsApplied()

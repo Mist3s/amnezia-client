@@ -107,28 +107,68 @@ void ManagedConfigController::configure(const QString &serverId, const QStringLi
     if (!isSupported(serverId)) {
         return;
     }
+
+    const ManagedConfigSettings current = m_managedConfigRepository->settings(serverId);
+    const QStringList group = current.isConfigured() ? serverGroup(current.deviceKey) : QStringList { serverId };
     if (backendUrls.isEmpty() && deviceKey.isEmpty()) {
-        forget(serverId);
+        for (const QString &memberId : group) {
+            forget(memberId);
+        }
+        return;
+    }
+    if (current.backendUrls == backendUrls && current.deviceKey == deviceKey) {
         return;
     }
 
-    ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
-    if (settings.backendUrls == backendUrls && settings.deviceKey == deviceKey) {
-        return;
+    for (const QString &memberId : group) {
+        const ManagedConfigSettings previous = m_managedConfigRepository->settings(memberId);
+        ManagedConfigSettings fresh;
+        fresh.backendUrls = backendUrls;
+        fresh.deviceKey = deviceKey;
+        fresh.mainId = previous.mainId;
+        fresh.remoteId = previous.remoteId;
+        fresh.remoteName = previous.remoteName;
+        abandonRefresh(memberId);
+        m_managedConfigRepository->setSettings(memberId, fresh);
     }
-
-    ManagedConfigSettings fresh;
-    fresh.backendUrls = backendUrls;
-    fresh.deviceKey = deviceKey;
-    abandonRefresh(serverId);
-    m_managedConfigRepository->setSettings(serverId, fresh);
     m_nextPollAt = 0;
 }
 
 void ManagedConfigController::forget(const QString &serverId)
 {
+    const QString deviceKey = m_managedConfigRepository->settings(serverId).deviceKey;
     abandonRefresh(serverId);
     m_managedConfigRepository->remove(serverId);
+
+    for (const QString &memberId : serverGroup(deviceKey)) {
+        ManagedConfigSettings settings = m_managedConfigRepository->settings(memberId);
+        if (!settings.listRevision.isEmpty()) {
+            settings.listRevision.clear();
+            m_managedConfigRepository->setSettings(memberId, settings);
+        }
+    }
+}
+
+QStringList ManagedConfigController::serverGroup(const QString &deviceKey) const
+{
+    QStringList group;
+    for (const QString &serverId : m_managedConfigRepository->managedServerIds()) {
+        if (isSupported(serverId) && m_managedConfigRepository->settings(serverId).deviceKey == deviceKey) {
+            group.append(serverId);
+        }
+    }
+    return group;
+}
+
+QString ManagedConfigController::mainServerOf(const QStringList &group) const
+{
+    for (const QString &serverId : group) {
+        const ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
+        if (settings.remoteId == settings.mainId) {
+            return serverId;
+        }
+    }
+    return group.value(0);
 }
 
 void ManagedConfigController::abandonRefresh(const QString &serverId)
@@ -209,9 +249,10 @@ void ManagedConfigController::setup(const QStringList &backendUrls, const QStrin
         }
         const ManagedConfigSettings current = settings(serverId);
         if (current.deviceKey == deviceKey || managedConfig::haveCommonBackend(current.backendUrls, backendUrls)) {
-            configure(serverId, backendUrls, deviceKey);
-            refresh(serverId);
-            finishSetup(serverId, RefreshResult::UpToDate, connectAfterSetup);
+            const QString mainServerId = mainServerOf(serverGroup(current.deviceKey));
+            configure(mainServerId, backendUrls, deviceKey);
+            refresh(mainServerId);
+            finishSetup(mainServerId, RefreshResult::UpToDate, connectAfterSetup);
             return;
         }
     }
@@ -251,23 +292,10 @@ void ManagedConfigController::requestSetupConfig(const ManagedConfigSettings &se
             return;
         }
         case managedConfig::ReplyAction::Apply: {
-            const QJsonObject config = nativeConfigFrom(decision.config);
-            const QString serverId = config.isEmpty()
-                    ? QString()
-                    : m_serversRepository->addServer(QString(), config, serverConfigUtils::ConfigType::Native);
-            if (!isSupported(serverId)) {
-                finishSetup(QString(), RefreshResult::InvalidConfig, false);
-                return;
-            }
-
-            ManagedConfigSettings fresh = settings;
-            fresh.lastWorkingUrl = backendUrl;
-            fresh.revision = decision.revision;
-            fresh.pollIntervalHours = decision.pollIntervalHours;
-            fresh.lastCheckedAt = QDateTime::currentSecsSinceEpoch();
-            fresh.lastResult = static_cast<int>(RefreshResult::Updated);
-            m_managedConfigRepository->setSettings(serverId, fresh);
-            finishSetup(serverId, RefreshResult::Updated, connectAfterSetup);
+            const ListOutcome outcome = applyServerList(settings, backendUrl, decision);
+            finishSetup(outcome.mainServerId,
+                        outcome.mainServerId.isEmpty() ? RefreshResult::InvalidConfig : RefreshResult::Updated,
+                        connectAfterSetup && !outcome.mainServerId.isEmpty());
             return;
         }
         }
@@ -308,7 +336,7 @@ void ManagedConfigController::requestNextBackend(const QString &serverId)
             m_pendingBackendUrls.value(serverId).isEmpty() ? QString() : m_pendingBackendUrls[serverId].takeFirst();
     const ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
 
-    QNetworkReply *reply = requestConfig(backendUrl, settings.deviceKey, settings.revision);
+    QNetworkReply *reply = requestConfig(backendUrl, settings.deviceKey, settings.listRevision);
     if (!reply) {
         finishRefresh(serverId, RefreshResult::BackendUnreachable);
         return;
@@ -326,9 +354,9 @@ void ManagedConfigController::handleBackendReply(const QString &serverId, const 
         return;
     }
 
-    ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
+    const ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
     const managedConfig::ReplyDecision decision =
-            managedConfig::decideOnReply(httpStatusOf(reply), reply->readAll(), settings.revision);
+            managedConfig::decideOnReply(httpStatusOf(reply), reply->readAll(), settings.listRevision);
 
     switch (decision.action) {
     case managedConfig::ReplyAction::TryNextBackend: {
@@ -340,44 +368,136 @@ void ManagedConfigController::handleBackendReply(const QString &serverId, const 
         return;
     }
     case managedConfig::ReplyAction::KeepCurrent: {
-        settings.lastWorkingUrl = backendUrl;
-        if (decision.pollIntervalHours > 0) {
-            settings.pollIntervalHours = decision.pollIntervalHours;
+        for (const QString &memberId : serverGroup(settings.deviceKey)) {
+            ManagedConfigSettings member = m_managedConfigRepository->settings(memberId);
+            member.lastWorkingUrl = backendUrl;
+            if (decision.pollIntervalHours > 0) {
+                member.pollIntervalHours = decision.pollIntervalHours;
+            }
+            m_managedConfigRepository->setSettings(memberId, member);
         }
-        m_managedConfigRepository->setSettings(serverId, settings);
         finishRefresh(serverId, RefreshResult::UpToDate);
         return;
     }
     case managedConfig::ReplyAction::Apply: {
-        if (!applyConfig(serverId, decision.config)) {
-            finishRefresh(serverId, RefreshResult::InvalidConfig);
-            return;
-        }
-        settings.lastWorkingUrl = backendUrl;
-        settings.revision = decision.revision;
-        settings.pollIntervalHours = decision.pollIntervalHours;
-        m_managedConfigRepository->setSettings(serverId, settings);
-        finishRefresh(serverId, RefreshResult::Updated);
+        const ListOutcome outcome = applyServerList(settings, backendUrl, decision);
+        finishRefresh(isManaged(serverId) ? serverId : outcome.mainServerId, outcome.result);
         return;
     }
     }
 }
 
-bool ManagedConfigController::applyConfig(const QString &serverId, const QString &config)
+ManagedConfigController::ListOutcome ManagedConfigController::applyServerList(const ManagedConfigSettings &source,
+                                                                              const QString &backendUrl,
+                                                                              const managedConfig::ReplyDecision &decision)
+{
+    const QStringList group = serverGroup(source.deviceKey);
+    QList<managedConfig::LocalServer> localServers;
+    for (const QString &serverId : group) {
+        const ManagedConfigSettings member = m_managedConfigRepository->settings(serverId);
+        localServers.append({ serverId, member.remoteId, member.revision });
+    }
+    const managedConfig::ServerListChanges changes =
+            managedConfig::planServerListChanges(localServers, source.mainId, decision);
+
+    QHash<QString, QJsonObject> configs;
+    QList<managedConfig::RemoteServer> changedServers = changes.added;
+    for (const managedConfig::KeptServer &kept : changes.kept) {
+        if (kept.isConfigChanged) {
+            changedServers.append(kept.remote);
+        }
+    }
+    for (const managedConfig::RemoteServer &remote : changedServers) {
+        const QJsonObject config = nativeConfigFrom(remote.config);
+        if (config.isEmpty()) {
+            return ListOutcome();
+        }
+        configs.insert(remote.id, config);
+    }
+
+    bool isChanged = changes.isMainChanged || !changes.added.isEmpty() || !changes.removedServerIds.isEmpty();
+    QList<QPair<QString, managedConfig::RemoteServer>> members;
+    for (const managedConfig::KeptServer &kept : changes.kept) {
+        const QString previousName = m_managedConfigRepository->settings(kept.serverId).remoteName;
+        isChanged |= updateServer(kept.serverId, configs.value(kept.remote.id), kept.remote.name, previousName);
+        members.append({ kept.serverId, kept.remote });
+    }
+    for (const managedConfig::RemoteServer &remote : changes.added) {
+        const QString serverId = m_serversRepository->addServer(QString(), configs.value(remote.id),
+                                                                serverConfigUtils::ConfigType::Native);
+        if (isSupported(serverId)) {
+            updateServer(serverId, QJsonObject(), remote.name, QString());
+            members.append({ serverId, remote });
+        }
+    }
+
+    ListOutcome outcome;
+    for (const auto &member : members) {
+        if (member.second.id == changes.mainId) {
+            outcome.mainServerId = member.first;
+        }
+    }
+    if (outcome.mainServerId.isEmpty()) {
+        return outcome;
+    }
+    outcome.result = isChanged ? RefreshResult::Updated : RefreshResult::UpToDate;
+
+    const QStringList &removed = changes.removedServerIds;
+    const QString connectedServerId = m_connectionServerId;
+    const bool isPlanServerRemoved = m_plan != Plan::Idle && removed.contains(m_planServerId);
+    if (isPlanServerRemoved) {
+        m_planServerId = outcome.mainServerId;
+    }
+    if (changes.isMainChanged || isPlanServerRemoved || removed.contains(connectedServerId)
+        || removed.contains(m_serversRepository->defaultServerId())) {
+        m_serversRepository->setDefaultServer(outcome.mainServerId);
+    }
+    for (const QString &serverId : removed) {
+        m_serversRepository->removeServer(serverId);
+    }
+
+    for (const auto &member : members) {
+        ManagedConfigSettings fresh = m_managedConfigRepository->settings(member.first);
+        fresh.backendUrls = source.backendUrls;
+        fresh.deviceKey = source.deviceKey;
+        fresh.revision = member.second.revision;
+        fresh.listRevision = decision.revision;
+        fresh.mainId = changes.mainId;
+        fresh.remoteId = member.second.id;
+        fresh.remoteName = member.second.name;
+        fresh.lastWorkingUrl = backendUrl;
+        fresh.pollIntervalHours = decision.pollIntervalHours;
+        fresh.lastCheckedAt = QDateTime::currentSecsSinceEpoch();
+        fresh.lastResult = static_cast<int>(outcome.result);
+        m_managedConfigRepository->setSettings(member.first, fresh);
+    }
+
+    const bool isOnLeftServer = removed.contains(connectedServerId)
+            || (changes.isMainChanged && group.contains(connectedServerId) && connectedServerId != outcome.mainServerId);
+    if (m_plan == Plan::Idle && m_connectionState != Vpn::ConnectionState::Disconnected && isOnLeftServer) {
+        logger.info() << "The backend moved this device to another server, reconnecting";
+        connectTo(outcome.mainServerId);
+    }
+    return outcome;
+}
+
+bool ManagedConfigController::updateServer(const QString &serverId, const QJsonObject &config, const QString &name,
+                                           const QString &previousName)
 {
     const auto current = m_serversRepository->nativeConfig(serverId);
     if (!current.has_value()) {
         return false;
     }
 
-    const QJsonObject imported = nativeConfigFrom(config);
-    if (imported.isEmpty()) {
+    const bool isNamedByBackend = previousName.isEmpty() || current->description == previousName;
+    const bool isRenamed = !name.isEmpty() && name != current->description && isNamedByBackend;
+    if (config.isEmpty() && !isRenamed) {
         return false;
     }
 
-    NativeServerConfig fresh = NativeServerConfig::fromJson(imported);
-    fresh.description = current->description;
-    fresh.displayName = current->displayName;
+    NativeServerConfig fresh = config.isEmpty() ? *current : NativeServerConfig::fromJson(config);
+    fresh.description = isRenamed ? name : current->description;
+    fresh.displayName = isRenamed ? name : current->displayName;
     m_serversRepository->editServer(serverId, fresh.toJson(), serverConfigUtils::ConfigType::Native);
     return true;
 }
@@ -396,10 +516,12 @@ void ManagedConfigController::finishRefresh(const QString &serverId, RefreshResu
 {
     m_pendingBackendUrls.remove(serverId);
 
-    ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
-    settings.lastCheckedAt = QDateTime::currentSecsSinceEpoch();
-    settings.lastResult = static_cast<int>(result);
-    m_managedConfigRepository->setSettings(serverId, settings);
+    for (const QString &memberId : serverGroup(m_managedConfigRepository->settings(serverId).deviceKey)) {
+        ManagedConfigSettings settings = m_managedConfigRepository->settings(memberId);
+        settings.lastCheckedAt = QDateTime::currentSecsSinceEpoch();
+        settings.lastResult = static_cast<int>(result);
+        m_managedConfigRepository->setSettings(memberId, settings);
+    }
 
     logger.info() << "Managed config refresh finished with result" << static_cast<int>(result);
 
@@ -453,10 +575,14 @@ void ManagedConfigController::pollIfDue()
     }
 
     int intervalHours = managedConfig::maxPollIntervalHours;
+    QStringList polledDeviceKeys;
     for (const QString &serverId : serverIds) {
-        const int serverIntervalHours = m_managedConfigRepository->settings(serverId).pollIntervalHours;
-        intervalHours = qMin(intervalHours, managedConfig::normalizedPollIntervalHours(serverIntervalHours));
-        refresh(serverId);
+        const ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
+        intervalHours = qMin(intervalHours, managedConfig::normalizedPollIntervalHours(settings.pollIntervalHours));
+        if (isManaged(serverId) && !polledDeviceKeys.contains(settings.deviceKey)) {
+            polledDeviceKeys.append(settings.deviceKey);
+            refresh(serverId);
+        }
     }
 
     m_nextPollAt =
@@ -545,15 +671,26 @@ void ManagedConfigController::reconnectWithFreshConfig()
 void ManagedConfigController::reopenConnection(const QString &serverId)
 {
     QTimer::singleShot(reopenConnectionDelayMs, this, [this, serverId]() {
-        if (m_plan != Plan::Idle || m_connectionState != Vpn::ConnectionState::Disconnected
-            || serverId != m_serversRepository->defaultServerId()) {
+        const QString targetServerId = reconnectTarget(serverId);
+        if (m_plan != Plan::Idle || m_connectionState != Vpn::ConnectionState::Disconnected || targetServerId.isEmpty()) {
             return;
         }
-        const ErrorCode errorCode = m_connectionController->openConnection(serverId);
+        const ErrorCode errorCode = m_connectionController->openConnection(targetServerId);
         if (errorCode != ErrorCode::NoError) {
             logger.error() << "Failed to reopen connection, error code" << static_cast<int>(errorCode);
         }
     });
+}
+
+QString ManagedConfigController::reconnectTarget(const QString &serverId) const
+{
+    const QString defaultServerId = m_serversRepository->defaultServerId();
+    if (serverId == defaultServerId) {
+        return serverId;
+    }
+    const bool isSameGroup = isManaged(serverId) && isManaged(defaultServerId)
+            && settings(serverId).deviceKey == settings(defaultServerId).deviceKey;
+    return isSameGroup ? defaultServerId : QString();
 }
 
 void ManagedConfigController::checkTunnel()

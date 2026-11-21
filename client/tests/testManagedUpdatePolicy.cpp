@@ -170,18 +170,11 @@ private slots:
 
     void updateEndpointCarriesDeviceDescription()
     {
-        QCOMPARE(updateEndpoint(backendUrl, "android", "5.1.1.11", "arm64-v8a", 34).toString(),
+        QCOMPARE(updateEndpoint(backendUrl, { "android", "5.1.1.11", "arm64-v8a", 34 }).toString(),
                  QString("https://backend.example.org/base/v1/"
                          "app_update?platform=android&version=5.1.1.11&abi=arm64-v8a&sdk=34"));
-        QCOMPARE(updateEndpoint(backendUrl, "linux", "5.1.1.11", "x86_64", 0).toString(),
+        QCOMPARE(updateEndpoint(backendUrl, { "linux", "5.1.1.11", "x86_64", 0 }).toString(),
                  QString("https://backend.example.org/base/v1/app_update?platform=linux&version=5.1.1.11&abi=x86_64"));
-    }
-
-    void androidAbiIsNamedAsInApk()
-    {
-        QCOMPARE(androidAbi("arm64"), QString("arm64-v8a"));
-        QCOMPARE(androidAbi("arm"), QString("armeabi-v7a"));
-        QCOMPARE(androidAbi("mips"), QString());
     }
 };
 

@@ -6,11 +6,13 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRandomGenerator>
+#include <QSysInfo>
 
 #include "amneziaApplication.h"
 #include "core/utils/managedConfig/managedConfigPolicy.h"
 #include "core/utils/serverConfigUtils.h"
 #include "logger.h"
+#include "version.h"
 
 namespace
 {
@@ -66,6 +68,23 @@ ManagedConfigController::ManagedConfigController(SecureServersRepository *server
             [this](const QString &serverId) { onConnectionRequested(serverId); });
     connect(m_connectionController, &ConnectionController::connectionStateChanged, this,
             &ManagedConfigController::onConnectionStateChanged);
+}
+
+managedConfig::DeviceDescription ManagedConfigController::thisDevice()
+{
+    managedConfig::DeviceDescription device;
+    device.version = QString(APP_VERSION);
+    device.abi = QSysInfo::buildCpuArchitecture();
+#if defined(Q_OS_ANDROID)
+    device.platform = "android";
+    device.abi = managedConfig::androidAbi(device.abi);
+    device.sdk = QNativeInterface::QAndroidApplication::sdkVersion();
+#elif defined(Q_OS_WINDOWS)
+    device.platform = "windows";
+#elif defined(Q_OS_LINUX)
+    device.platform = "linux";
+#endif
+    return device;
 }
 
 bool ManagedConfigController::isSupported(const QString &serverId) const
@@ -229,7 +248,7 @@ QNetworkReply *ManagedConfigController::requestConfig(const QString &backendUrl,
         return nullptr;
     }
 
-    QNetworkRequest request(managedConfig::configEndpoint(backendUrl));
+    QNetworkRequest request(managedConfig::configEndpoint(backendUrl, thisDevice()));
     request.setTransferTimeout(backendRequestTimeoutMs);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setRawHeader("Authorization", "Bearer " + deviceKey.toUtf8());

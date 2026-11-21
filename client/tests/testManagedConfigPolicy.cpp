@@ -150,8 +150,24 @@ private slots:
 
     void configEndpointKeepsBackendPath()
     {
-        QCOMPARE(configEndpoint("https://example.org/base").toString(),
+        QCOMPARE(configEndpoint("https://example.org/base", {}).toString(),
                  QString("https://example.org/base/v1/config?servers=1"));
+    }
+
+    void configEndpointTellsWhatTheDeviceRuns()
+    {
+        QCOMPARE(configEndpoint("https://example.org/base", { "android", "5.1.1.1110", "arm64-v8a", 34 }).toString(),
+                 QString("https://example.org/base/v1/"
+                         "config?servers=1&platform=android&version=5.1.1.1110&abi=arm64-v8a&sdk=34"));
+        QCOMPARE(configEndpoint("https://example.org/base", { "linux", "5.1.1.1110", "x86_64", 0 }).toString(),
+                 QString("https://example.org/base/v1/config?servers=1&platform=linux&version=5.1.1.1110&abi=x86_64"));
+    }
+
+    void androidAbiIsNamedAsInApk()
+    {
+        QCOMPARE(androidAbi("arm64"), QString("arm64-v8a"));
+        QCOMPARE(androidAbi("arm"), QString("armeabi-v7a"));
+        QCOMPARE(androidAbi("mips"), QString());
     }
 
     void newRevisionIsApplied()

@@ -2,7 +2,6 @@
 
 #include <QCryptographicHash>
 #include <QFile>
-#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -57,26 +56,10 @@ namespace amnezia::managedUpdate
         return !version.isEmpty() && fileUrl.isValid() && isSha256Hex(sha256);
     }
 
-    QString androidAbi(const QString &cpuArchitecture)
-    {
-        static const QHash<QString, QString> abis = {
-            { "arm64", "arm64-v8a" }, { "arm", "armeabi-v7a" }, { "x86_64", "x86_64" }, { "i386", "x86" }
-        };
-        return abis.value(cpuArchitecture);
-    }
-
-    QUrl updateEndpoint(const QString &backendUrl, const QString &platform, const QString &version, const QString &abi,
-                        int sdk)
+    QUrl updateEndpoint(const QString &backendUrl, const managedConfig::DeviceDescription &device)
     {
         QUrlQuery query;
-        query.addQueryItem("platform", platform);
-        query.addQueryItem("version", version);
-        if (!abi.isEmpty()) {
-            query.addQueryItem("abi", abi);
-        }
-        if (sdk > 0) {
-            query.addQueryItem("sdk", QString::number(sdk));
-        }
+        managedConfig::describeDevice(query, device);
 
         QUrl url(backendUrl + updatePath);
         url.setQuery(query);

@@ -7,6 +7,8 @@
 #include <QStringList>
 #include <QUrl>
 
+class QUrlQuery;
+
 namespace amnezia::managedConfig
 {
 
@@ -62,6 +64,14 @@ namespace amnezia::managedConfig
         bool isMainChanged = false;
     };
 
+    struct DeviceDescription
+    {
+        QString platform;
+        QString version;
+        QString abi;
+        int sdk = 0;
+    };
+
     struct SetupRequest
     {
         QStringList backendUrls;
@@ -76,7 +86,9 @@ namespace amnezia::managedConfig
     SetupRequest parseSetupRequest(const QByteArray &content);
     bool haveCommonBackend(const QStringList &left, const QStringList &right);
     QStringList orderedBackendUrls(const QStringList &backendUrls, const QString &lastWorkingUrl);
-    QUrl configEndpoint(const QString &backendUrl);
+    QString androidAbi(const QString &cpuArchitecture);
+    void describeDevice(QUrlQuery &query, const DeviceDescription &device);
+    QUrl configEndpoint(const QString &backendUrl, const DeviceDescription &device);
 
     ReplyDecision decideOnReply(int httpStatus, const QByteArray &body, const QString &currentRevision);
     ServerListChanges planServerListChanges(const QList<LocalServer> &localServers, const QString &localMainId,

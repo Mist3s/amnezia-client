@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -22,6 +23,10 @@ namespace
     constexpr QLatin1String replyIdKey("id");
     constexpr QLatin1String replyNameKey("name");
     constexpr QLatin1String serverListQuery("servers=1");
+    constexpr QLatin1String devicePlatformKey("platform");
+    constexpr QLatin1String deviceVersionKey("version");
+    constexpr QLatin1String deviceAbiKey("abi");
+    constexpr QLatin1String deviceSdkKey("sdk");
 
     constexpr QLatin1String setupBackendKey("backend");
     constexpr QLatin1String setupDeviceKeyKey("key");
@@ -135,10 +140,35 @@ namespace amnezia::managedConfig
         return ordered;
     }
 
-    QUrl configEndpoint(const QString &backendUrl)
+    QString androidAbi(const QString &cpuArchitecture)
     {
+        static const QHash<QString, QString> abis = {
+            { "arm64", "arm64-v8a" }, { "arm", "armeabi-v7a" }, { "x86_64", "x86_64" }, { "i386", "x86" }
+        };
+        return abis.value(cpuArchitecture);
+    }
+
+    void describeDevice(QUrlQuery &query, const DeviceDescription &device)
+    {
+        const QList<std::pair<QString, QString>> items = {
+            { devicePlatformKey, device.platform },
+            { deviceVersionKey, device.version },
+            { deviceAbiKey, device.abi },
+            { deviceSdkKey, device.sdk > 0 ? QString::number(device.sdk) : QString() },
+        };
+        for (const auto &[key, value] : items) {
+            if (!value.isEmpty()) {
+                query.addQueryItem(key, value);
+            }
+        }
+    }
+
+    QUrl configEndpoint(const QString &backendUrl, const DeviceDescription &device)
+    {
+        QUrlQuery query(serverListQuery);
+        describeDevice(query, device);
         QUrl endpoint(backendUrl + configPath);
-        endpoint.setQuery(QUrlQuery(serverListQuery));
+        endpoint.setQuery(query);
         return endpoint;
     }
 

@@ -35,6 +35,8 @@ public:
                                      ManagedConfigRepository *managedConfigRepository, ImportController *importController,
                                      ConnectionController *connectionController, QObject *parent = nullptr);
 
+    static amnezia::managedConfig::DeviceDescription thisDevice();
+
     bool isSupported(const QString &serverId) const;
     bool isManaged(const QString &serverId) const;
     bool isRefreshing(const QString &serverId) const;

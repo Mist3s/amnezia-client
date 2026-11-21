@@ -6,6 +6,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include "managedConfigPolicy.h"
+
 namespace amnezia::managedUpdate
 {
 
@@ -35,10 +37,7 @@ namespace amnezia::managedUpdate
         UpdateOffer offer;
     };
 
-    QString androidAbi(const QString &cpuArchitecture);
-
-    QUrl updateEndpoint(const QString &backendUrl, const QString &platform, const QString &version, const QString &abi,
-                        int sdk);
+    QUrl updateEndpoint(const QString &backendUrl, const managedConfig::DeviceDescription &device);
     QUrl fileUrl(const QString &backendUrl, const QString &filePath);
 
     bool isNewerVersion(const QString &candidate, const QString &current);

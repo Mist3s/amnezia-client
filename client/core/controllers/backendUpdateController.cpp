@@ -7,7 +7,6 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QStandardPaths>
-#include <QSysInfo>
 #include <QtConcurrent>
 
 #include "amneziaApplication.h"
@@ -29,36 +28,14 @@ namespace
     constexpr int httpOk = 200;
 
 #if defined(Q_OS_ANDROID)
-    constexpr QLatin1String platformName("android");
     constexpr QLatin1String installerFileName("update.apk");
 #elif defined(Q_OS_WINDOWS)
-    constexpr QLatin1String platformName("windows");
     constexpr QLatin1String installerFileName("update.exe");
 #elif defined(Q_OS_LINUX)
-    constexpr QLatin1String platformName("linux");
     constexpr QLatin1String installerFileName("update.run");
 #else
-    constexpr QLatin1String platformName("");
     constexpr QLatin1String installerFileName("");
 #endif
-
-    QString currentAbi()
-    {
-#if defined(Q_OS_ANDROID)
-        return amnezia::managedUpdate::androidAbi(QSysInfo::buildCpuArchitecture());
-#else
-        return QSysInfo::buildCpuArchitecture();
-#endif
-    }
-
-    int currentSdk()
-    {
-#if defined(Q_OS_ANDROID)
-        return QNativeInterface::QAndroidApplication::sdkVersion();
-#else
-        return 0;
-#endif
-    }
 
     QString installerDirectory()
     {
@@ -91,13 +68,16 @@ BackendUpdateController::BackendUpdateController(SecureAppSettingsRepository *ap
 {
     QFile::remove(installerFilePath());
 
-    connect(m_managedConfigController, &ManagedConfigController::refreshFinished, this,
-            [this](const QString &, ManagedConfigController::RefreshResult result) { checkAfterConfigRefresh(result); });
+    const auto checkAfterBackendReply = [this](const QString &, ManagedConfigController::RefreshResult result) {
+        checkAfterConfigRefresh(result);
+    };
+    connect(m_managedConfigController, &ManagedConfigController::refreshFinished, this, checkAfterBackendReply);
+    connect(m_managedConfigController, &ManagedConfigController::setupFinished, this, checkAfterBackendReply);
 }
 
 bool BackendUpdateController::isBackendConfigured() const
 {
-    return !platformName.isEmpty() && m_managedConfigController->updateSource().isConfigured();
+    return !installerFileName.isEmpty() && m_managedConfigController->updateSource().isConfigured();
 }
 
 QNetworkAccessManager *BackendUpdateController::networkManager() const
@@ -157,8 +137,7 @@ void BackendUpdateController::requestNextBackend()
     }
 
     const QString backendUrl = m_pendingBackendUrls.takeFirst();
-    const QUrl endpoint = amnezia::managedUpdate::updateEndpoint(backendUrl, platformName, QString(APP_VERSION),
-                                                                 currentAbi(), currentSdk());
+    const QUrl endpoint = amnezia::managedUpdate::updateEndpoint(backendUrl, ManagedConfigController::thisDevice());
 
     QNetworkReply *reply = manager->get(backendRequest(endpoint, source.deviceKey, backendRequestTimeoutMs));
     connect(reply, &QNetworkReply::finished, this, [this, backendUrl, reply]() {

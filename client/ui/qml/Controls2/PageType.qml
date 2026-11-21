@@ -21,6 +21,14 @@ Item {
         color: AmneziaStyle.color.bgBase
     }
 
+    function focusFirstControl() {
+        if (root.StackView.status !== StackView.Active) {
+            return
+        }
+        const item = root.initialFocusItem === root ? root.nextItemInFocusChain(true) : root.initialFocusItem
+        item.forceActiveFocus(Qt.TabFocusReason)
+    }
+
     StackView.onActivated: {
         if (!root.focusOnActivation) {
             return
@@ -29,6 +37,10 @@ Item {
             if (item === root.Overlay.overlay) {
                 return
             }
+        }
+        if (SettingsController.isOnTv()) {
+            Qt.callLater(root.focusFirstControl)
+            return
         }
         root.initialFocusItem.forceActiveFocus()
     }

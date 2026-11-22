@@ -215,6 +215,9 @@ ErrorCode ConnectionController::openConnection(const QString &serverId)
     if (errorCode != ErrorCode::NoError) {
         return errorCode;
     }
+    if (m_configurationExtender) {
+        m_configurationExtender(serverId, vpnConfiguration);
+    }
 
     const auto apiV2 = m_serversRepository->apiV2Config(serverId);
     if (apiV2.has_value() && !apiV2->sendPayload.isEmpty()) {
@@ -223,6 +226,11 @@ ErrorCode ConnectionController::openConnection(const QString &serverId)
 
     emit openConnectionRequested(serverId, container, vpnConfiguration);
     return ErrorCode::NoError;
+}
+
+void ConnectionController::setConfigurationExtender(ConfigurationExtender extender)
+{
+    m_configurationExtender = std::move(extender);
 }
 
 void ConnectionController::closeConnection()

@@ -215,7 +215,8 @@ open class AmneziaVpnService : VpnService() {
         connectionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + connectionExceptionHandler)
         loadServerData()
         watchdog = ConnectionWatchdog(
-            mainScope, { vpnProto?.protocol?.statistics ?: Statistics.EMPTY_STATISTICS }, { disconnect() }, { connect() }
+            mainScope, { vpnProto?.protocol?.statistics ?: Statistics.EMPTY_STATISTICS }, { disconnect() }, ::connect,
+            { Prefs.load(PREFS_CONFIG_KEY) }
         )
         launchProtocolStateHandler()
         networkState = NetworkState(this, ::reconnect)

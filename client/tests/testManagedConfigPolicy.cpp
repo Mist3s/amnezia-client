@@ -163,6 +163,29 @@ private slots:
                  QString("https://example.org/base/v1/config?servers=1&platform=linux&version=5.1.1.1110&abi=x86_64"));
     }
 
+    void serviceKnowsWhereToAskForAFreshConfig()
+    {
+        const ServiceSource source { { "https://a.example.org", "https://b.example.org/base" },
+                                     "https://b.example.org/base",
+                                     "device-key",
+                                     "nl1",
+                                     "de1",
+                                     "server-revision",
+                                     "list-revision" };
+        const QJsonObject info = serviceInfo(source, { "android", "5.1.1.1113", "armeabi-v7a", 28 });
+        const QJsonArray urls = info.value("urls").toArray();
+        QCOMPARE(urls.size(), 2);
+        QCOMPARE(urls.at(0).toString(),
+                 QString("https://b.example.org/base/v1/"
+                         "config?servers=1&platform=android&version=5.1.1.1113&abi=armeabi-v7a&sdk=28"));
+        QVERIFY(urls.at(1).toString().startsWith("https://a.example.org/v1/config?servers=1"));
+        QCOMPARE(info.value("key").toString(), QString("device-key"));
+        QCOMPARE(info.value("server").toString(), QString("nl1"));
+        QCOMPARE(info.value("main").toString(), QString("de1"));
+        QCOMPARE(info.value("revision").toString(), QString("server-revision"));
+        QCOMPARE(info.value("list").toString(), QString("list-revision"));
+    }
+
     void androidAbiIsNamedAsInApk()
     {
         QCOMPARE(androidAbi("arm64"), QString("arm64-v8a"));

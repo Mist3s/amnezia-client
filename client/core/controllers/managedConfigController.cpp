@@ -73,6 +73,11 @@ ManagedConfigController::ManagedConfigController(SecureServersRepository *server
 
     connect(m_connectionController, &ConnectionController::openConnectionRequested, this,
             [this](const QString &serverId) { onConnectionRequested(serverId); });
+#if defined(Q_OS_ANDROID)
+    m_connectionController->setConfigurationExtender([this](const QString &serverId, QJsonObject &vpnConfiguration) {
+        addServiceInfo(serverId, vpnConfiguration);
+    });
+#endif
     connect(m_connectionController, &ConnectionController::connectionStateChanged, this,
             &ManagedConfigController::onConnectionStateChanged);
 }
@@ -621,6 +626,18 @@ void ManagedConfigController::pollIfDue()
 
     m_nextPollAt =
             now + managedConfig::nextPollDelayMs(intervalHours, QRandomGenerator::global()->generateDouble()) / 1000;
+}
+
+void ManagedConfigController::addServiceInfo(const QString &serverId, QJsonObject &vpnConfiguration) const
+{
+    if (!isManaged(serverId)) {
+        return;
+    }
+    const ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
+    const managedConfig::ServiceSource source { settings.backendUrls, settings.lastWorkingUrl, settings.deviceKey,
+                                                settings.remoteId,    settings.mainId,         settings.revision,
+                                                settings.listRevision };
+    vpnConfiguration.insert(managedConfig::serviceInfoKey, managedConfig::serviceInfo(source, thisDevice()));
 }
 
 void ManagedConfigController::onConnectionRequested(const QString &serverId)

@@ -103,6 +103,7 @@ private:
     void pollIfDue();
 
     void onConnectionRequested(const QString &serverId);
+    void addServiceInfo(const QString &serverId, QJsonObject &vpnConfiguration) const;
     void onConnectionStateChanged(Vpn::ConnectionState state);
     bool isConnectedWithStaleConfig() const;
     void reconnectWithFreshConfig();

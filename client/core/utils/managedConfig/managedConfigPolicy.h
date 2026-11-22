@@ -2,6 +2,8 @@
 #define MANAGEDCONFIGPOLICY_H
 
 #include <QByteArray>
+#include <QJsonObject>
+#include <QLatin1String>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -16,6 +18,7 @@ namespace amnezia::managedConfig
     constexpr int minPollIntervalHours = 1;
     constexpr int maxPollIntervalHours = 168;
     constexpr int connectTimeoutMs = 30 * 1000;
+    constexpr QLatin1String serviceInfoKey("homevpn_managed");
 
     enum class ReplyAction {
         Apply,
@@ -73,6 +76,17 @@ namespace amnezia::managedConfig
         int sdk = 0;
     };
 
+    struct ServiceSource
+    {
+        QStringList backendUrls;
+        QString lastWorkingUrl;
+        QString deviceKey;
+        QString remoteId;
+        QString mainId;
+        QString revision;
+        QString listRevision;
+    };
+
     struct SetupRequest
     {
         QStringList backendUrls;
@@ -90,6 +104,7 @@ namespace amnezia::managedConfig
     QString androidAbi(const QString &cpuArchitecture);
     void describeDevice(QUrlQuery &query, const DeviceDescription &device);
     QUrl configEndpoint(const QString &backendUrl, const DeviceDescription &device);
+    QJsonObject serviceInfo(const ServiceSource &source, const DeviceDescription &device);
 
     ReplyDecision decideOnReply(int httpStatus, const QByteArray &body, const QString &currentRevision);
     ServerListChanges planServerListChanges(const QList<LocalServer> &localServers, const QString &localMainId,

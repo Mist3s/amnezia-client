@@ -175,6 +175,16 @@ namespace amnezia::managedConfig
         return endpoint;
     }
 
+    QJsonObject serviceInfo(const ServiceSource &source, const DeviceDescription &device)
+    {
+        QJsonArray urls;
+        for (const QString &backendUrl : orderedBackendUrls(source.backendUrls, source.lastWorkingUrl)) {
+            urls.append(QString::fromLatin1(configEndpoint(backendUrl, device).toEncoded()));
+        }
+        return QJsonObject { { "urls", urls },          { "key", source.deviceKey },     { "server", source.remoteId },
+                             { "main", source.mainId }, { "revision", source.revision }, { "list", source.listRevision } };
+    }
+
     ReplyDecision decideOnReply(int httpStatus, const QByteArray &body, const QString &currentRevision)
     {
         ReplyDecision decision;

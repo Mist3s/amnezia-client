@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QJsonObject>
 #include <QPair>
+#include <functional>
 #include <memory>
 
 #include "core/utils/containerEnum.h"
@@ -37,6 +38,9 @@ public:
     ErrorCode isConnectionSupported(const QString &serverId) const;
 
     ErrorCode openConnection(const QString &serverId);
+
+    using ConfigurationExtender = std::function<void(const QString &serverId, QJsonObject &vpnConfiguration)>;
+    void setConfigurationExtender(ConfigurationExtender extender);
 
     void closeConnection();
 
@@ -79,6 +83,7 @@ private:
     SecureServersRepository* m_serversRepository;
     SecureAppSettingsRepository* m_appSettingsRepository;
     VpnConnection* m_vpnConnection;
+    ConfigurationExtender m_configurationExtender;
 };
 
 #endif

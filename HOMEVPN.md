@@ -61,6 +61,7 @@
 | Запрос свежего конфига службой Android | `client/android/src/org/amnezia/vpn/ManagedConfigRefresher.kt`; адрес бэкенда и ключ ей передаёт `ManagedConfigController::addServiceInfo` через `ConnectionController::setConfigurationExtender` |
 | Название и значки для Linux и Windows | `homevpn/desktop/` (подключается ключом `cmake -C homevpn/desktop/brand.cmake`), `client/cmake/branding/desktop.cmake` |
 | Проверка установщика Windows на машине GitHub | `.github/workflows/homevpn-windows-check.yml`, `homevpn/desktop/check-windows.ps1` |
+| Исправление оригинала: на Linux поиск роутера ломался на таблице маршрутов больше 8 КБ (длинный «Мимо VPN»), и маршрут до сервера в обход туннеля не ставился | `client/core/utils/networkUtilities.cpp`, `getGatewayAndIface` |
 
 Проверка сертификата — штатный TLS Qt, sha256 — `QCryptographicHash`, установка APK — системный установщик Android.
 Своей криптографии в форке нет.

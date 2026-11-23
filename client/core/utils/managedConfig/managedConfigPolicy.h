@@ -103,7 +103,9 @@ namespace amnezia::managedConfig
     QStringList orderedBackendUrls(const QStringList &backendUrls, const QString &lastWorkingUrl);
     QString androidAbi(const QString &cpuArchitecture);
     void describeDevice(QUrlQuery &query, const DeviceDescription &device);
-    QUrl configEndpoint(const QString &backendUrl, const DeviceDescription &device);
+    QUrl configEndpoint(const QString &backendUrl, const DeviceDescription &device,
+                        const QString &failedEndpoint = QString());
+    QString endpointOf(const QJsonObject &serverJson);
     QJsonObject serviceInfo(const ServiceSource &source, const DeviceDescription &device);
 
     ReplyDecision decideOnReply(int httpStatus, const QByteArray &body, const QString &currentRevision);

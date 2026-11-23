@@ -163,6 +163,26 @@ private slots:
                  QString("https://example.org/base/v1/config?servers=1&platform=linux&version=5.1.1.1110&abi=x86_64"));
     }
 
+    void configEndpointNamesTheAddressThatDidNotAnswer()
+    {
+        QCOMPARE(configEndpoint("https://example.org", { "linux", "5.1.1.1114", "x86_64", 0 }, "198.51.100.20:443")
+                         .toString(),
+                 QString("https://example.org/v1/"
+                         "config?servers=1&platform=linux&version=5.1.1.1114&abi=x86_64&failed=198.51.100.20:443"));
+    }
+
+    void endpointIsReadFromTheSavedServer()
+    {
+        const auto serverWithPort = [](const QJsonValue &port) {
+            const QJsonObject container { { "container", "amnezia-awg" }, { "awg", QJsonObject { { "port", port } } } };
+            return QJsonObject { { "hostName", "198.51.100.20" }, { "containers", QJsonArray { container } } };
+        };
+        QCOMPARE(endpointOf(serverWithPort("4443")), QString("198.51.100.20:4443"));
+        QCOMPARE(endpointOf(serverWithPort(443)), QString("198.51.100.20:443"));
+        QCOMPARE(endpointOf(QJsonObject { { "hostName", "198.51.100.20" } }), QString());
+        QCOMPARE(endpointOf(QJsonObject()), QString());
+    }
+
     void serviceKnowsWhereToAskForAFreshConfig()
     {
         const ServiceSource source { { "https://a.example.org", "https://b.example.org/base" },

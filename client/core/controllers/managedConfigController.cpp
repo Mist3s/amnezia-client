@@ -24,7 +24,7 @@ namespace
     constexpr int pollCheckIntervalMs = 5 * 60 * 1000;
     constexpr int reopenConnectionDelayMs = 500;
 
-    constexpr int tunnelCheckIntervalMs = 5 * 60 * 1000;
+    constexpr int tunnelCheckIntervalMs = 60 * 1000;
     constexpr int tunnelCheckRetryDelayMs = 30 * 1000;
     constexpr int tunnelProbeTimeoutMs = 7 * 1000;
     constexpr int failedTunnelChecksToRecover = 2;
@@ -256,14 +256,14 @@ QNetworkAccessManager *ManagedConfigController::networkManager() const
 }
 
 QNetworkReply *ManagedConfigController::requestConfig(const QString &backendUrl, const QString &deviceKey,
-                                                      const QString &revision) const
+                                                      const QString &revision, const QString &failedEndpoint) const
 {
     QNetworkAccessManager *manager = networkManager();
     if (!manager || backendUrl.isEmpty()) {
         return nullptr;
     }
 
-    QNetworkRequest request(managedConfig::configEndpoint(backendUrl, thisDevice()));
+    QNetworkRequest request(managedConfig::configEndpoint(backendUrl, thisDevice(), failedEndpoint));
     request.setTransferTimeout(backendRequestTimeoutMs);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setRawHeader("Authorization", "Bearer " + deviceKey.toUtf8());
@@ -301,7 +301,7 @@ void ManagedConfigController::requestSetupConfig(const ManagedConfigSettings &se
                                                  bool connectAfterSetup)
 {
     const QString backendUrl = pendingBackendUrls.isEmpty() ? QString() : pendingBackendUrls.takeFirst();
-    QNetworkReply *reply = requestConfig(backendUrl, settings.deviceKey, QString());
+    QNetworkReply *reply = requestConfig(backendUrl, settings.deviceKey, QString(), QString());
     if (!reply) {
         finishSetup(QString(), RefreshResult::BackendUnreachable, false);
         return;
@@ -370,7 +370,8 @@ void ManagedConfigController::requestNextBackend(const QString &serverId)
             m_pendingBackendUrls.value(serverId).isEmpty() ? QString() : m_pendingBackendUrls[serverId].takeFirst();
     const ManagedConfigSettings settings = m_managedConfigRepository->settings(serverId);
 
-    QNetworkReply *reply = requestConfig(backendUrl, settings.deviceKey, settings.listRevision);
+    QNetworkReply *reply =
+            requestConfig(backendUrl, settings.deviceKey, settings.listRevision, failedEndpointOf(serverId));
     if (!reply) {
         finishRefresh(serverId, RefreshResult::BackendUnreachable);
         return;
@@ -380,6 +381,17 @@ void ManagedConfigController::requestNextBackend(const QString &serverId)
         reply->deleteLater();
         handleBackendReply(serverId, backendUrl, reply);
     });
+}
+
+QString ManagedConfigController::failedEndpointOf(const QString &serverId) const
+{
+    const bool isAfterFailure = m_plan == Plan::ReconnectAfterRecoveryRefresh
+            || m_plan == Plan::ReconnectAfterErrorRefresh || m_plan == Plan::ReconnectAfterRetryRefresh;
+    if (!isAfterFailure || serverId != m_planServerId) {
+        return QString();
+    }
+    const auto serverJson = m_serversRepository->serverJsonById(serverId);
+    return serverJson.has_value() ? managedConfig::endpointOf(*serverJson) : QString();
 }
 
 void ManagedConfigController::handleBackendReply(const QString &serverId, const QString &backendUrl, QNetworkReply *reply)

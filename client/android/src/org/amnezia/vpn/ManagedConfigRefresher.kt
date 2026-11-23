@@ -3,6 +3,7 @@ package org.amnezia.vpn
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import org.amnezia.vpn.util.Log
 import org.json.JSONArray
 import org.json.JSONException
@@ -27,17 +28,19 @@ private sealed interface BackendReply {
 
 object ManagedConfigRefresher {
 
-    fun fresh(savedConfig: String): String? {
-        val info = try {
-            JSONObject(savedConfig).optJSONObject(SERVICE_INFO_KEY)
+    fun fresh(savedConfig: String, isAfterFailure: Boolean = false): String? {
+        val config = try {
+            JSONObject(savedConfig)
         } catch (e: JSONException) {
             null
         } ?: return null
+        val info = config.optJSONObject(SERVICE_INFO_KEY) ?: return null
         val urls = info.optJSONArray("urls") ?: return null
+        val failed = if (isAfterFailure) endpointOf(config) else null
         for (index in 0 until urls.length()) {
             val url = urls.optString(index)
             if (!url.startsWith("https://")) continue
-            when (val reply = request(url, info)) {
+            when (val reply = request(withFailedEndpoint(url, failed), info)) {
                 BackendReply.Unchanged -> return null
                 BackendReply.Failed -> continue
                 is BackendReply.Fresh -> return patchedConfig(savedConfig, reply.body)
@@ -73,6 +76,19 @@ object ManagedConfigRefresher {
     } catch (e: IllegalArgumentException) {
         Log.w(TAG, "The backend config does not fit: ${e.message}")
         null
+    }
+
+    private fun endpointOf(config: JSONObject): String? {
+        val data = config.optJSONObject(AWG_CONFIG_DATA_KEY) ?: return null
+        val host = data.optString("hostName").ifEmpty { config.optString("hostName") }
+        val port = data.optString("port")
+        if (host.isEmpty() || port.isEmpty()) return null
+        return if (host.contains(':')) "[$host]:$port" else "$host:$port"
+    }
+
+    private fun withFailedEndpoint(url: String, failed: String?): String {
+        if (failed == null) return url
+        return url + (if (url.contains('?')) "&" else "?") + "failed=" + URLEncoder.encode(failed, "UTF-8")
     }
 
     private fun request(url: String, info: JSONObject): BackendReply {

@@ -83,7 +83,9 @@ private:
     QStringList serverGroup(const QString &deviceKey) const;
     QString mainServerOf(const QStringList &group) const;
 
-    QNetworkReply *requestConfig(const QString &backendUrl, const QString &deviceKey, const QString &revision) const;
+    QNetworkReply *requestConfig(const QString &backendUrl, const QString &deviceKey, const QString &revision,
+                                 const QString &failedEndpoint) const;
+    QString failedEndpointOf(const QString &serverId) const;
     QJsonObject nativeConfigFrom(const QString &config) const;
 
     void requestSetupConfig(const ManagedConfigSettings &settings, QStringList pendingBackendUrls, bool connectAfterSetup);

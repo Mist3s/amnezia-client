@@ -21,8 +21,10 @@ import org.amnezia.vpn.util.Log
 private const val TAG = "ConnectionWatchdog"
 private const val CONNECT_TIMEOUT_MS = 30_000L
 private const val TUNNEL_DOWN_TIMEOUT_MS = 10_000L
-private const val TRAFFIC_CHECK_INTERVAL_MS = 60_000L
-private const val SILENT_CHECKS_TO_GIVE_UP = 5
+private const val TRAFFIC_CHECK_INTERVAL_MS = 30_000L
+private const val SILENT_CHECKS_TO_GIVE_UP = 10
+private const val BUSY_SILENT_CHECKS_TO_GIVE_UP = 2
+private const val BUSY_TX_BYTES = 4_096L
 private const val MS_IN_MINUTE = 60_000L
 private val RETRY_DELAYS_MINUTES = longArrayOf(1, 2, 4, 8, 15, 30)
 
@@ -72,17 +74,22 @@ class ConnectionWatchdog(
     private suspend fun watchTraffic() {
         var previous = statistics()
         var silentChecks = 0
-        while (silentChecks < SILENT_CHECKS_TO_GIVE_UP) {
+        var busySilentChecks = 0
+        while (silentChecks < SILENT_CHECKS_TO_GIVE_UP && busySilentChecks < BUSY_SILENT_CHECKS_TO_GIVE_UP) {
             delay(TRAFFIC_CHECK_INTERVAL_MS)
             val current = statistics()
+            val isAnswered = current.rxBytes > previous.rxBytes
+            val sentBytes = current.txBytes - previous.txBytes
             silentChecks = when {
-                current.rxBytes > previous.rxBytes -> 0
-                current.txBytes > previous.txBytes -> silentChecks + 1
+                isAnswered -> 0
+                sentBytes > 0 -> silentChecks + 1
                 else -> silentChecks
             }
+            busySilentChecks = if (!isAnswered && sentBytes >= BUSY_TX_BYTES) busySilentChecks + 1 else 0
             previous = current
         }
-        giveUp("nothing received for $SILENT_CHECKS_TO_GIVE_UP min")
+        val silentSeconds = TRAFFIC_CHECK_INTERVAL_MS / 1000 * maxOf(silentChecks, busySilentChecks)
+        giveUp("nothing received for $silentSeconds s")
     }
 
     private fun giveUp(reason: String) {
@@ -104,7 +111,7 @@ class ConnectionWatchdog(
 
     private suspend fun connectWithFreshConfig(): Boolean {
         val saved = savedConfig()
-        val fresh = withContext(Dispatchers.IO) { ManagedConfigRefresher.fresh(saved) } ?: return false
+        val fresh = withContext(Dispatchers.IO) { ManagedConfigRefresher.fresh(saved, isAfterFailure = true) } ?: return false
         Log.i(TAG, "The backend gave a new config, connecting with it")
         isOwnAttempt = true
         turnOn(fresh)

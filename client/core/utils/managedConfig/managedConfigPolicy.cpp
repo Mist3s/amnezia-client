@@ -28,6 +28,7 @@ namespace
     constexpr QLatin1String deviceVersionKey("version");
     constexpr QLatin1String deviceAbiKey("abi");
     constexpr QLatin1String deviceSdkKey("sdk");
+    constexpr QLatin1String failedEndpointKey("failed");
 
     constexpr QLatin1String setupBackendKey("backend");
     constexpr QLatin1String setupDeviceKeyKey("key");
@@ -166,13 +167,34 @@ namespace amnezia::managedConfig
         }
     }
 
-    QUrl configEndpoint(const QString &backendUrl, const DeviceDescription &device)
+    QUrl configEndpoint(const QString &backendUrl, const DeviceDescription &device, const QString &failedEndpoint)
     {
         QUrlQuery query(serverListQuery);
         describeDevice(query, device);
+        if (!failedEndpoint.isEmpty()) {
+            query.addQueryItem(failedEndpointKey, failedEndpoint);
+        }
         QUrl endpoint(backendUrl + configPath);
         endpoint.setQuery(query);
         return endpoint;
+    }
+
+    QString endpointOf(const QJsonObject &serverJson)
+    {
+        const QString host = serverJson.value("hostName").toString();
+        if (host.isEmpty()) {
+            return QString();
+        }
+        for (const QJsonValue &container : serverJson.value("containers").toArray()) {
+            for (const QJsonValue &protocol : container.toObject()) {
+                const QJsonValue port = protocol.toObject().value("port");
+                const QString portText = port.isDouble() ? QString::number(port.toInt()) : port.toString();
+                if (!portText.isEmpty()) {
+                    return QString("%1:%2").arg(host.contains(':') ? QString("[%1]").arg(host) : host, portText);
+                }
+            }
+        }
+        return QString();
     }
 
     QJsonObject serviceInfo(const ServiceSource &source, const DeviceDescription &device)
